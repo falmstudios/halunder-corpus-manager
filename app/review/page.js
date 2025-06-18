@@ -10,6 +10,7 @@ export default function TextReview() {
   const [saving, setSaving] = useState(false)
   const [selectedBucket, setSelectedBucket] = useState('pending')
   const [searchTerm, setSearchTerm] = useState('')
+  const [bucketCounts, setBucketCounts] = useState({})
   
   // Editable fields
   const [halunderText, setHalunderText] = useState('')
@@ -26,6 +27,7 @@ export default function TextReview() {
   }
 
   useEffect(() => {
+    loadBucketCounts()
     loadTexts()
   }, [selectedBucket])
 
@@ -37,6 +39,19 @@ export default function TextReview() {
       loadTranslationAids(currentText.id)
     }
   }, [currentText])
+
+  const loadBucketCounts = async () => {
+    try {
+      const response = await fetch('/api/bucket-counts')
+      const result = await response.json()
+      
+      if (response.ok) {
+        setBucketCounts(result.counts)
+      }
+    } catch (err) {
+      console.error('Failed to load bucket counts:', err)
+    }
+  }
 
   const loadTexts = async () => {
     setLoading(true)
@@ -147,8 +162,9 @@ export default function TextReview() {
         throw new Error(result.error || 'Failed to update status')
       }
       
-      // Reload texts and move to next
+      // Reload texts and counts
       await loadTexts()
+      await loadBucketCounts()
       
     } catch (err) {
       setError(err.message)
@@ -168,11 +184,6 @@ export default function TextReview() {
   const removeTranslationAid = (index) => {
     setTranslationAids(translationAids.filter((_, i) => i !== index))
   }
-
-  const bucketCounts = {}
-  Object.keys(buckets).forEach(key => {
-    bucketCounts[key] = texts.filter(t => t.review_status === key).length
-  })
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
@@ -314,6 +325,7 @@ export default function TextReview() {
                     {currentText.author && <div><strong>Author:</strong> {currentText.author}</div>}
                     {currentText.translator && <div><strong>Translator:</strong> {currentText.translator}</div>}
                     {currentText.text_quality && <div><strong>Quality:</strong> {currentText.text_quality}</div>}
+                    {currentText.documents && <div><strong>Source:</strong> {currentText.documents.publication} ({currentText.documents.year})</div>}
                     <div><strong>Status:</strong> 
                       <span style={{ 
                         marginLeft: '5px',
