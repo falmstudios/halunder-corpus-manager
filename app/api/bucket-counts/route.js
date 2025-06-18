@@ -7,6 +7,7 @@ const supabase = createClient(
 
 export async function GET(request) {
   try {
+    // Get counts for each status
     const { data, error } = await supabase
       .from('texts')
       .select('review_status')
@@ -25,12 +26,15 @@ export async function GET(request) {
       deleted: 0
     }
     
+    // Count all texts including those with null review_status (treat as pending)
     data.forEach(text => {
       const status = text.review_status || 'pending'
       if (counts.hasOwnProperty(status)) {
         counts[status]++
       }
     })
+    
+    console.log('Bucket counts:', counts) // Debug log
     
     return Response.json({ counts })
     
