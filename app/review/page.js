@@ -12,10 +12,37 @@ export default function TextReview() {
   const [searchTerm, setSearchTerm] = useState('')
   const [bucketCounts, setBucketCounts] = useState({})
   
-  // Editable fields
-  const [halunderText, setHalunderText] = useState('')
-  const [germanText, setGermanText] = useState('')
-  const [editorialIntro, setEditorialIntro] = useState('')
+  // Editable text fields
+  const [textFields, setTextFields] = useState({
+    title: '',
+    subtitle: '',
+    author: '',
+    translator: '',
+    editor_corrector: '',
+    series_info: '',
+    text_quality: '',
+    complete_helgolandic_text: '',
+    german_translation_text: '',
+    editorial_introduction: '',
+    german_translation_location: '',
+    original_source_title: '',
+    original_source_author: '',
+    original_source_publication_info: ''
+  })
+  
+  // Editable document metadata
+  const [documentFields, setDocumentFields] = useState({
+    publication: '',
+    date: '',
+    year: '',
+    month: '',
+    edition: '',
+    issue_number: '',
+    page_numbers: '',
+    source_file: '',
+    halunder_sentence_count: ''
+  })
+  
   const [translationAids, setTranslationAids] = useState([])
 
   const buckets = {
@@ -33,9 +60,39 @@ export default function TextReview() {
 
   useEffect(() => {
     if (currentText) {
-      setHalunderText(currentText.complete_helgolandic_text || '')
-      setGermanText(currentText.german_translation_text || '')
-      setEditorialIntro(currentText.editorial_introduction || '')
+      // Set text fields
+      setTextFields({
+        title: currentText.title || '',
+        subtitle: currentText.subtitle || '',
+        author: currentText.author || '',
+        translator: currentText.translator || '',
+        editor_corrector: currentText.editor_corrector || '',
+        series_info: currentText.series_info || '',
+        text_quality: currentText.text_quality || '',
+        complete_helgolandic_text: currentText.complete_helgolandic_text || '',
+        german_translation_text: currentText.german_translation_text || '',
+        editorial_introduction: currentText.editorial_introduction || '',
+        german_translation_location: currentText.german_translation_location || '',
+        original_source_title: currentText.original_source_title || '',
+        original_source_author: currentText.original_source_author || '',
+        original_source_publication_info: currentText.original_source_publication_info || ''
+      })
+      
+      // Set document fields
+      if (currentText.documents) {
+        setDocumentFields({
+          publication: currentText.documents.publication || '',
+          date: currentText.documents.date || '',
+          year: currentText.documents.year || '',
+          month: currentText.documents.month || '',
+          edition: currentText.documents.edition || '',
+          issue_number: currentText.documents.issue_number || '',
+          page_numbers: currentText.documents.page_numbers || '',
+          source_file: currentText.documents.source_file || '',
+          halunder_sentence_count: currentText.documents.halunder_sentence_count || ''
+        })
+      }
+      
       loadTranslationAids(currentText.id)
     }
   }, [currentText])
@@ -108,10 +165,9 @@ export default function TextReview() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: currentText.id,
-          complete_helgolandic_text: halunderText,
-          german_translation_text: germanText,
-          editorial_introduction: editorialIntro,
-          translation_aids: translationAids
+          ...textFields,
+          translation_aids: translationAids,
+          document_metadata: documentFields
         })
       })
       
@@ -123,9 +179,11 @@ export default function TextReview() {
       // Update current text
       setCurrentText(prev => ({
         ...prev,
-        complete_helgolandic_text: halunderText,
-        german_translation_text: germanText,
-        editorial_introduction: editorialIntro
+        ...textFields,
+        documents: {
+          ...prev.documents,
+          ...documentFields
+        }
       }))
       
     } catch (err) {
@@ -138,14 +196,12 @@ export default function TextReview() {
   const updateTextStatus = async (status) => {
     if (!currentText) return
     
-    let confirmMessage = ''
+    // Only confirm for delete
     if (status === 'deleted') {
-      confirmMessage = 'Are you sure you want to mark this text as deleted?'
-    } else {
-      confirmMessage = `Move this text to "${buckets[status].label}"?`
+      if (!confirm('Are you sure you want to mark this text as deleted?')) {
+        return
+      }
     }
-    
-    if (!confirm(confirmMessage)) return
     
     try {
       const response = await fetch('/api/update-text-status', {
@@ -169,6 +225,14 @@ export default function TextReview() {
     } catch (err) {
       setError(err.message)
     }
+  }
+
+  const updateTextField = (field, value) => {
+    setTextFields(prev => ({ ...prev, [field]: value }))
+  }
+
+  const updateDocumentField = (field, value) => {
+    setDocumentFields(prev => ({ ...prev, [field]: value }))
   }
 
   const addTranslationAid = () => {
@@ -311,281 +375,136 @@ export default function TextReview() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {currentText ? (
           <>
-            {/* Header with metadata */}
+            {/* Header with save button */}
             <div style={{ 
               padding: '20px', 
               backgroundColor: '#fff', 
               borderBottom: '1px solid #ddd',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <h1 style={{ margin: '0 0 10px 0' }}>{currentText.title || 'Untitled Text'}</h1>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', fontSize: '14px', color: '#666' }}>
-                    {currentText.author && <div><strong>Author:</strong> {currentText.author}</div>}
-                    {currentText.translator && <div><strong>Translator:</strong> {currentText.translator}</div>}
-                    {currentText.text_quality && <div><strong>Quality:</strong> {currentText.text_quality}</div>}
-                    {currentText.documents && <div><strong>Source:</strong> {currentText.documents.publication} ({currentText.documents.year})</div>}
-                    <div><strong>Status:</strong> 
-                      <span style={{ 
-                        marginLeft: '5px',
-                        padding: '2px 8px',
-                        borderRadius: '12px',
-                        backgroundColor: buckets[currentText.review_status]?.color || '#ccc',
-                        color: 'white',
-                        fontSize: '12px'
-                      }}>
-                        {buckets[currentText.review_status]?.label || currentText.review_status}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                
-                <button
-                  onClick={saveCurrentText}
-                  disabled={saving}
-                  style={{
-                    padding: '10px 20px',
-                    backgroundColor: saving ? '#ccc' : '#28a745',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: saving ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-              
-              {error && (
-                <div style={{
-                  marginTop: '10px',
-                  padding: '10px',
-                  backgroundColor: '#ffebee',
-                  color: '#c62828',
-                  borderRadius: '4px'
-                }}>
-                  {error}
-                </div>
-              )}
-            </div>
-
-            {/* Main text editing area */}
-            <div style={{ flex: 1, padding: '20px', overflow: 'auto' }}>
-              {/* Text fields */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-                <div>
-                  <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '10px' }}>
-                    Halunder Text:
-                  </label>
-                  <textarea
-                    value={halunderText}
-                    onChange={(e) => setHalunderText(e.target.value)}
-                    style={{
-                      width: '100%',
-                      height: '400px',
-                      padding: '15px',
-                      border: '1px solid #ccc',
-                      borderRadius: '4px',
-                      fontFamily: 'monospace',
-                      fontSize: '14px',
-                      resize: 'vertical'
-                    }}
-                    placeholder="Enter Halunder text here..."
-                  />
-                </div>
-                
-                <div>
-                  <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '10px' }}>
-                    German Translation:
-                  </label>
-                  <textarea
-                    value={germanText}
-                    onChange={(e) => setGermanText(e.target.value)}
-                    style={{
-                      width: '100%',
-                      height: '400px',
-                      padding: '15px',
-                      border: '1px solid #ccc',
-                      borderRadius: '4px',
-                      fontFamily: 'monospace',
-                      fontSize: '14px',
-                      resize: 'vertical'
-                    }}
-                    placeholder="Enter German translation here..."
-                  />
-                </div>
-              </div>
-
-              {/* Editorial Introduction */}
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '10px' }}>
-                  Editorial Introduction:
-                </label>
-                <textarea
-                  value={editorialIntro}
-                  onChange={(e) => setEditorialIntro(e.target.value)}
-                  style={{
-                    width: '100%',
-                    height: '100px',
-                    padding: '15px',
-                    border: '1px solid #ccc',
-                    borderRadius: '4px',
-                    fontSize: '14px',
-                    resize: 'vertical'
-                  }}
-                  placeholder="Editorial introduction or notes..."
-                />
-              </div>
-
-              {/* Translation Aids */}
-              <div style={{ marginBottom: '30px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                  <label style={{ fontWeight: 'bold' }}>Translation Aids:</label>
-                  <button
-                    onClick={addTranslationAid}
-                    style={{
-                      padding: '8px 16px',
-                      backgroundColor: '#007bff',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Add Translation Aid
-                  </button>
-                </div>
-                
-                {translationAids.map((aid, index) => (
-                  <div key={index} style={{ 
-                    display: 'grid', 
-                    gridTemplateColumns: '100px 200px 1fr 60px', 
-                    gap: '10px', 
-                    alignItems: 'center',
-                    marginBottom: '10px',
-                    padding: '10px',
-                    backgroundColor: '#f8f9fa',
-                    borderRadius: '4px'
-                  }}>
-                    <input
-                      type="text"
-                      placeholder="No."
-                      value={aid.number || ''}
-                      onChange={(e) => updateTranslationAid(index, 'number', e.target.value)}
-                      style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Term"
-                      value={aid.term || ''}
-                      onChange={(e) => updateTranslationAid(index, 'term', e.target.value)}
-                      style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Explanation"
-                      value={aid.explanation || ''}
-                      onChange={(e) => updateTranslationAid(index, 'explanation', e.target.value)}
-                      style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-                    />
-                    <button
-                      onClick={() => removeTranslationAid(index)}
-                      style={{
-                        padding: '8px',
-                        backgroundColor: '#dc3545',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Action buttons */}
-            <div style={{ 
-              padding: '20px', 
-              backgroundColor: '#f8f9fa', 
-              borderTop: '1px solid #ddd',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
               display: 'flex',
-              justifyContent: 'center',
-              gap: '15px'
+              justifyContent: 'space-between',
+              alignItems: 'center'
             }}>
+              <h1 style={{ margin: 0 }}>
+                {textFields.title || 'Untitled Text'}
+                <span style={{ 
+                  marginLeft: '15px',
+                  padding: '4px 12px',
+                  borderRadius: '12px',
+                  backgroundColor: buckets[currentText.review_status || 'pending']?.color || '#ccc',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: 'normal'
+                }}>
+                  {buckets[currentText.review_status || 'pending']?.label || 'Pending'}
+                </span>
+              </h1>
+              
               <button
-                onClick={() => updateTextStatus('deleted')}
+                onClick={saveCurrentText}
+                disabled={saving}
                 style={{
-                  padding: '12px 24px',
-                  backgroundColor: '#dc3545',
+                  padding: '10px 20px',
+                  backgroundColor: saving ? '#ccc' : '#28a745',
                   color: 'white',
                   border: 'none',
                   borderRadius: '4px',
-                  cursor: 'pointer',
+                  cursor: saving ? 'not-allowed' : 'pointer',
                   fontWeight: 'bold'
                 }}
               >
-                Delete
-              </button>
-              <button
-                onClick={() => updateTextStatus('parallel_confirmed')}
-                style={{
-                  padding: '12px 24px',
-                  backgroundColor: '#28a745',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold'
-                }}
-              >
-                Parallel Confirmed
-              </button>
-              <button
-                onClick={() => updateTextStatus('german_available')}
-                style={{
-                  padding: '12px 24px',
-                  backgroundColor: '#17a2b8',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold'
-                }}
-              >
-                German Available
-              </button>
-              <button
-                onClick={() => updateTextStatus('halunder_only')}
-                style={{
-                  padding: '12px 24px',
-                  backgroundColor: '#fd7e14',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold'
-                }}
-              >
-                Halunder Only
+                {saving ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
-          </>
-        ) : (
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center', 
-            height: '100%',
-            color: '#666'
-          }}>
-            Select a text to review
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
+            
+            {error && (
+              <div style={{
+                padding: '10px 20px',
+                backgroundColor: '#ffebee',
+                color: '#c62828',
+                borderBottom: '1px solid #ddd'
+              }}>
+                {error}
+              </div>
+            )}
+
+            {/* Main editing area */}
+            <div style={{ flex: 1, padding: '20px', overflow: 'auto' }}>
+              
+              {/* Text Metadata */}
+              <div style={{ marginBottom: '30px' }}>
+                <h3 style={{ marginBottom: '15px', color: '#333' }}>Text Metadata</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '15px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Title:</label>
+                    <input
+                      type="text"
+                      value={textFields.title}
+                      onChange={(e) => updateTextField('title', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Subtitle:</label>
+                    <input
+                      type="text"
+                      value={textFields.subtitle}
+                      onChange={(e) => updateTextField('subtitle', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Author:</label>
+                    <input
+                      type="text"
+                      value={textFields.author}
+                      onChange={(e) => updateTextField('author', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Translator:</label>
+                    <input
+                      type="text"
+                      value={textFields.translator}
+                      onChange={(e) => updateTextField('translator', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Editor/Corrector:</label>
+                    <input
+                      type="text"
+                      value={textFields.editor_corrector}
+                      onChange={(e) => updateTextField('editor_corrector', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Text Quality:</label>
+                    <select
+                      value={textFields.text_quality}
+                      onChange={(e) => updateTextField('text_quality', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    >
+                      <option value="">Select...</option>
+                      <option value="professional">Professional</option>
+                      <option value="colloquial">Colloquial</option>
+                      <option value="scholarly">Scholarly</option>
+                      <option value="literary">Literary</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Document Metadata */}
+              <div style={{ marginBottom: '30px' }}>
+                <h3 style={{ marginBottom: '15px', color: '#333' }}>Document Metadata</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Publication:</label>
+                    <input
+                      type="text"
+                      value={documentFields.publication}
+                      onChange={(e) => updateDocumentField('publication', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadiu
