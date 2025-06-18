@@ -61,7 +61,7 @@ export default function TableEditor() {
   const [editingCell, setEditingCell] = useState(null)
   const [page, setPage] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
-  const [pageSize] = useState(50)
+  const [pageSize, setPageSize] = useState(50)
 
   useEffect(() => {
     // Initialize visible columns for selected table
@@ -73,12 +73,13 @@ export default function TableEditor() {
     })
     setVisibleColumns(initialVisible)
     setPage(1)
+    setFilters({}) // Clear filters when changing tables
     loadData()
   }, [selectedTable])
 
   useEffect(() => {
     loadData()
-  }, [page, sortColumn, sortDirection, filters])
+  }, [page, sortColumn, sortDirection, filters, pageSize])
 
   const loadData = async () => {
     setLoading(true)
@@ -138,6 +139,11 @@ export default function TableEditor() {
     setPage(1)
   }
 
+  const clearAllFilters = () => {
+    setFilters({})
+    setPage(1)
+  }
+
   const handleCellEdit = async (rowId, column, newValue) => {
     try {
       const response = await fetch('/api/table-update', {
@@ -152,7 +158,8 @@ export default function TableEditor() {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to update')
+        const result = await response.json()
+        throw new Error(result.error || 'Failed to update')
       }
 
       loadData() // Reload data
@@ -176,7 +183,8 @@ export default function TableEditor() {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to delete')
+        const result = await response.json()
+        throw new Error(result.error || 'Failed to delete')
       }
 
       loadData()
@@ -206,18 +214,51 @@ export default function TableEditor() {
         </a>
       </div>
 
-      {/* Table Selection */}
-      <div style={{ marginBottom: '20px' }}>
-        <label style={{ fontWeight: 'bold', marginRight: '10px' }}>Select Table:</label>
-        <select 
-          value={selectedTable} 
-          onChange={(e) => setSelectedTable(e.target.value)}
-          style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+      {/* Controls Row */}
+      <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
+        {/* Table Selection */}
+        <div>
+          <label style={{ fontWeight: 'bold', marginRight: '10px' }}>Table:</label>
+          <select 
+            value={selectedTable} 
+            onChange={(e) => setSelectedTable(e.target.value)}
+            style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+          >
+            {Object.entries(TABLES).map(([key, label]) => (
+              <option key={key} value={key}>{label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Page Size */}
+        <div>
+          <label style={{ fontWeight: 'bold', marginRight: '10px' }}>Rows per page:</label>
+          <select 
+            value={pageSize} 
+            onChange={(e) => setPageSize(parseInt(e.target.value))}
+            style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+          >
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+            <option value={200}>200</option>
+          </select>
+        </div>
+
+        {/* Clear Filters */}
+        <button
+          onClick={clearAllFilters}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: '#ffc107',
+            color: '#212529',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
         >
-          {Object.entries(TABLES).map(([key, label]) => (
-            <option key={key} value={key}>{label}</option>
-          ))}
-        </select>
+          Clear All Filters
+        </button>
       </div>
 
       {/* Column Visibility Controls */}
@@ -239,7 +280,9 @@ export default function TableEditor() {
 
       {/* Filters */}
       <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#e3f2fd', borderRadius: '4px' }}>
-        <h3>Filters:</h3>
+        <h3>Filters: <small style={{ fontWeight: 'normal', color: '#666' }}>
+          (Use "NULL" for empty fields, "NOT_NULL" for non-empty fields, "EMPTY" for empty strings)
+        </small></h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
           {visibleCols.map(column => (
             <div key={column}>
@@ -265,6 +308,11 @@ export default function TableEditor() {
       {/* Data Count */}
       <div style={{ marginBottom: '10px', fontSize: '14px', color: '#666' }}>
         Total records: {totalCount} | Page {page} of {totalPages}
+        {Object.keys(filters).length > 0 && (
+          <span style={{ marginLeft: '10px', color: '#007bff' }}>
+            (Filtered by: {Object.keys(filters).join(', ')})
+          </span>
+        )}
       </div>
 
       {error && (
@@ -365,7 +413,7 @@ export default function TableEditor() {
                             }}
                           />
                         ) : (
-                          <span title={row[column]}>
+                          <span title={row[column]} style={{ cursor: 'pointer' }}>
                             {typeof row[column] === 'object' 
                               ? JSON.stringify(row[column]) 
                               : String(row[column] || '')}
@@ -387,6 +435,21 @@ export default function TableEditor() {
             gap: '10px', 
             marginTop: '20px' 
           }}>
+            <button
+              onClick={() => setPage(1)}
+              disabled={page === 1}
+              style={{
+                padding: '8px 12px',
+                backgroundColor: page === 1 ? '#ccc' : '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: page === 1 ? 'not-allowed' : 'pointer'
+              }}
+            >
+              First
+            </button>
+            
             <button
               onClick={() => setPage(p => Math.max(1, p - 1))}
               disabled={page === 1}
@@ -417,6 +480,21 @@ export default function TableEditor() {
               }}
             >
               Next
+            </button>
+            
+            <button
+              onClick={() => setPage(totalPages)}
+              disabled={page === totalPages}
+              style={{
+                padding: '8px 12px',
+                backgroundColor: page === totalPages ? '#ccc' : '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: page === totalPages ? 'not-allowed' : 'pointer'
+              }}
+            >
+              Last
             </button>
           </div>
         </>
