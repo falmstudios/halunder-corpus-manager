@@ -507,4 +507,271 @@ export default function TextReview() {
                       type="text"
                       value={documentFields.publication}
                       onChange={(e) => updateDocumentField('publication', e.target.value)}
-                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadiu
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Year:</label>
+                    <input
+                      type="number"
+                      value={documentFields.year}
+                      onChange={(e) => updateDocumentField('year', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Month:</label>
+                    <input
+                      type="text"
+                      value={documentFields.month}
+                      onChange={(e) => updateDocumentField('month', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Edition:</label>
+                    <input
+                      type="text"
+                      value={documentFields.edition}
+                      onChange={(e) => updateDocumentField('edition', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Issue Number:</label>
+                    <input
+                      type="number"
+                      value={documentFields.issue_number}
+                      onChange={(e) => updateDocumentField('issue_number', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Page Numbers:</label>
+                    <input
+                      type="text"
+                      value={documentFields.page_numbers}
+                      onChange={(e) => updateDocumentField('page_numbers', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Main text fields */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                <div>
+                  <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '10px' }}>
+                    Halunder Text:
+                  </label>
+                  <textarea
+                    value={textFields.complete_helgolandic_text}
+                    onChange={(e) => updateTextField('complete_helgolandic_text', e.target.value)}
+                    style={{
+                      width: '100%',
+                      height: '400px',
+                      padding: '15px',
+                      border: '1px solid #ccc',
+                      borderRadius: '4px',
+                      fontFamily: 'monospace',
+                      fontSize: '14px',
+                      resize: 'vertical'
+                    }}
+                    placeholder="Enter Halunder text here..."
+                  />
+                </div>
+                
+                <div>
+                  <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '10px' }}>
+                    German Translation:
+                  </label>
+                  <textarea
+                    value={textFields.german_translation_text}
+                    onChange={(e) => updateTextField('german_translation_text', e.target.value)}
+                    style={{
+                      width: '100%',
+                      height: '400px',
+                      padding: '15px',
+                      border: '1px solid #ccc',
+                      borderRadius: '4px',
+                      fontFamily: 'monospace',
+                      fontSize: '14px',
+                      resize: 'vertical'
+                    }}
+                    placeholder="Enter German translation here..."
+                  />
+                </div>
+              </div>
+
+              {/* Editorial Introduction */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '10px' }}>
+                  Editorial Introduction:
+                </label>
+                <textarea
+                  value={textFields.editorial_introduction}
+                  onChange={(e) => updateTextField('editorial_introduction', e.target.value)}
+                  style={{
+                    width: '100%',
+                    height: '100px',
+                    padding: '15px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    resize: 'vertical'
+                  }}
+                  placeholder="Editorial introduction or notes..."
+                />
+              </div>
+
+              {/* Translation Aids */}
+              <div style={{ marginBottom: '30px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                  <label style={{ fontWeight: 'bold' }}>Translation Aids:</label>
+                  <button
+                    onClick={addTranslationAid}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#007bff',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Add Translation Aid
+                  </button>
+                </div>
+                
+                {translationAids.map((aid, index) => (
+                  <div key={index} style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: '100px 200px 1fr 60px', 
+                    gap: '10px', 
+                    alignItems: 'center',
+                    marginBottom: '10px',
+                    padding: '10px',
+                    backgroundColor: '#f8f9fa',
+                    borderRadius: '4px'
+                  }}>
+                    <input
+                      type="text"
+                      placeholder="No."
+                      value={aid.number || ''}
+                      onChange={(e) => updateTranslationAid(index, 'number', e.target.value)}
+                      style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Term"
+                      value={aid.term || ''}
+                      onChange={(e) => updateTranslationAid(index, 'term', e.target.value)}
+                      style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Explanation"
+                      value={aid.explanation || ''}
+                      onChange={(e) => updateTranslationAid(index, 'explanation', e.target.value)}
+                      style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                    <button
+                      onClick={() => removeTranslationAid(index)}
+                      style={{
+                        padding: '8px',
+                        backgroundColor: '#dc3545',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ 
+              padding: '20px', 
+              backgroundColor: '#f8f9fa', 
+              borderTop: '1px solid #ddd',
+              display: 'flex',
+              justifyContent: 'center',
+              gap: '15px'
+            }}>
+              <button
+                onClick={() => updateTextStatus('deleted')}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: '#dc3545',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                Delete
+              </button>
+              <button
+                onClick={() => updateTextStatus('parallel_confirmed')}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                Parallel Confirmed
+              </button>
+              <button
+                onClick={() => updateTextStatus('german_available')}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: '#17a2b8',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                German Available
+              </button>
+              <button
+                onClick={() => updateTextStatus('halunder_only')}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: '#fd7e14',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                Halunder Only
+              </button>
+            </div>
+          </>
+        ) : (
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center', 
+            height: '100%',
+            color: '#666'
+          }}>
+            Select a text to review
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
