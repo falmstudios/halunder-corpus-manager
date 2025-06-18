@@ -14,26 +14,30 @@ export async function GET(request) {
     let query = supabase
       .from('texts')
       .select(`
-        id,
-        title,
-        subtitle,
-        author,
-        translator,
-        editor_corrector,
-        text_quality,
-        complete_helgolandic_text,
-        german_translation_text,
-        editorial_introduction,
-        review_status,
-        created_at,
+        *,
         documents (
+          id,
           publication,
+          date,
           year,
+          month,
+          edition,
+          issue_number,
+          page_numbers,
+          source_file,
+          halunder_sentence_count,
           filename
         )
       `)
-      .eq('review_status', bucket)
-      .order('created_at', { ascending: true })
+    
+    // Handle pending status (including null values)
+    if (bucket === 'pending') {
+      query = query.or('review_status.is.null,review_status.eq.pending')
+    } else {
+      query = query.eq('review_status', bucket)
+    }
+    
+    query = query.order('created_at', { ascending: true })
     
     // Apply search filter
     if (search.trim()) {
