@@ -8,6 +8,7 @@ export default function Home() {
   const [message, setMessage] = useState('')
   const [progress, setProgress] = useState(0)
   const [uploadDetails, setUploadDetails] = useState(null)
+  const [currentFile, setCurrentFile] = useState('')
 
   const handleFileSelect = (event) => {
     const selectedFiles = Array.from(event.target.files)
@@ -15,6 +16,7 @@ export default function Home() {
     setMessage('')
     setProgress(0)
     setUploadDetails(null)
+    setCurrentFile('')
   }
 
   const uploadFiles = async () => {
@@ -30,8 +32,9 @@ export default function Home() {
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
+        setCurrentFile(file.name)
         setMessage(`Uploading ${file.name}... (${i + 1}/${files.length})`)
-        setProgress(((i) / files.length) * 100)
+        setProgress((i / files.length) * 100)
         
         const formData = new FormData()
         formData.append('file', file)
@@ -40,6 +43,14 @@ export default function Home() {
           method: 'POST',
           body: formData
         })
+
+        // Check if response is JSON
+        const contentType = response.headers.get('content-type')
+        if (!contentType || !contentType.includes('application/json')) {
+          const text = await response.text()
+          console.error('Non-JSON response:', text)
+          throw new Error(`Server returned HTML instead of JSON. Check server logs.`)
+        }
 
         const result = await response.json()
         
@@ -53,9 +64,11 @@ export default function Home() {
       
       setMessage(`Successfully uploaded ${files.length} file(s)!`)
       setFiles([])
+      setCurrentFile('')
       document.getElementById('fileInput').value = ''
       
     } catch (error) {
+      console.error('Upload error:', error)
       setMessage(`Error: ${error.message}`)
     } finally {
       setUploading(false)
@@ -66,18 +79,32 @@ export default function Home() {
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
         <h1>Halunder Corpus Manager</h1>
-        <a 
-          href="/editor" 
-          style={{
-            padding: '10px 20px',
-            backgroundColor: '#28a745',
-            color: 'white',
-            textDecoration: 'none',
-            borderRadius: '4px'
-          }}
-        >
-          Open Table Editor
-        </a>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <a 
+            href="/editor" 
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#28a745',
+              color: 'white',
+              textDecoration: 'none',
+              borderRadius: '4px'
+            }}
+          >
+            Table Editor
+          </a>
+          <a 
+            href="/review" 
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#17a2b8',
+              color: 'white',
+              textDecoration: 'none',
+              borderRadius: '4px'
+            }}
+          >
+            Text Review
+          </a>
+        </div>
       </div>
 
       <div style={{ backgroundColor: '#f8f9fa', padding: '20px', borderRadius: '8px', marginBottom: '20px' }}>
@@ -118,7 +145,10 @@ export default function Home() {
         {/* Progress Bar */}
         {uploading && (
           <div style={{ margin: '20px 0' }}>
-            <div style={{ marginBottom: '10px' }}>Progress: {Math.round(progress)}%</div>
+            <div style={{ marginBottom: '10px' }}>
+              Progress: {Math.round(progress)}%
+              {currentFile && <span style={{ marginLeft: '10px', color: '#666' }}>({currentFile})</span>}
+            </div>
             <div style={{
               width: '100%',
               backgroundColor: '#e9ecef',
