@@ -1,6 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
 
-// You'll need to add your Supabase credentials here
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -19,10 +18,13 @@ export async function POST(request) {
     const text = await file.text()
     const jsonData = JSON.parse(text)
     
-    // Process the JSON data (this is where we'll add the database insertion logic)
-    await processJsonData(jsonData)
+    // Process the JSON data
+    const result = await processJsonData(jsonData)
     
-    return Response.json({ message: 'File uploaded successfully' })
+    return Response.json({ 
+      message: 'File processed successfully',
+      ...result
+    })
     
   } catch (error) {
     console.error('Upload error:', error)
@@ -31,38 +33,84 @@ export async function POST(request) {
 }
 
 async function processJsonData(data) {
-  // For now, just validate that it's an array
   if (!Array.isArray(data)) {
     throw new Error('JSON file must contain an array of documents')
   }
   
-  // We'll add the database insertion logic here in the next step
   console.log(`Processing ${data.length} documents...`)
   
-  for (const item of data) {
-    await processDocument(item)
+  let processed = 0
+  let skipped = 0
+  let errors = 0
+  const errorDetails = []
+  
+  for (let i = 0; i < data.length; i++) {
+    const item = data[i]
+    try {
+      const result = await processDocument(item, i + 1)
+      if (result.skipped) {
+        skipped++
+        console.log(`Document ${i + 1} skipped: ${result.reason}`)
+      } else {
+        processed++
+        console.log(`Document ${i + 1} processed successfully`)
+      }
+    } catch (error) {
+      console.error(`Error processing document ${i + 1} (${item.filename || 'unnamed'}):`, error.message)
+      errors++
+      errorDetails.push({
+        documentIndex: i + 1,
+        filename: item.filename,
+        error: error.message
+      })
+      // Continue processing other documents
+    }
+  }
+  
+  console.log(`Processing complete: ${processed} processed, ${skipped} skipped, ${errors} errors`)
+  
+  return {
+    total: data.length,
+    processed,
+    skipped,
+    errors,
+    errorDetails: errorDetails.slice(0, 10)
   }
 }
 
-async function processDocument(item) {
-  // Extract document metadata
-  const docData = item.data
-  const metadata = docData.documentMetadata
+async function processDocument(item, documentIndex) {
+  if (!item.data) {
+    return { skipped: true, reason: 'Missing data field' }
+  }
   
-  // Insert document
+  const docData = item.data
+  const metadata = docData.documentMetadata || {}
+  
+  // Check if document already exists
+  const { data: existingDoc } = await supabase
+    .from('documents')
+    .select('id')
+    .eq('filename', item.filename || `document_${documentIndex}`)
+    .single()
+  
+  if (existingDoc) {
+    return { skipped: true, reason: 'Document already exists' }
+  }
+  
+  // Insert document - keep empty fields as NULL
   const { data: document, error: docError } = await supabase
     .from('documents')
     .insert({
-      publication: metadata.publication,
-      date: metadata.date,
-      year: metadata.year,
-      month: metadata.month,
-      edition: metadata.edition,
-      issue_number: metadata.issueNumber,
-      page_numbers: metadata.pageNumbers,
-      source_file: metadata.sourceFile,
-      halunder_sentence_count: metadata.halunderSentenceCount,
-      filename: item.filename
+      publication: metadata.publication || null,
+      date: metadata.date || null,
+      year: metadata.year || null,
+      month: metadata.month || null,
+      edition: metadata.edition || null,
+      issue_number: metadata.issueNumber || null,
+      page_numbers: metadata.pageNumbers || null,
+      source_file: metadata.sourceFile || null,
+      halunder_sentence_count: metadata.halunderSentenceCount || null,
+      filename: item.filename || `document_${documentIndex}`
     })
     .select()
     .single()
@@ -71,18 +119,32 @@ async function processDocument(item) {
     throw new Error(`Failed to insert document: ${docError.message}`)
   }
   
-  // Process Helgolandic texts
-  for (const textData of docData.helgolandicTexts || []) {
-    await processText(document.id, textData)
+  // Process Helgolandic texts - always process, even if some fields are missing
+  const texts = docData.helgolandicTexts || []
+  for (let j = 0; j < texts.length; j++) {
+    const textData = texts[j]
+    try {
+      await processText(document.id, textData, j + 1)
+    } catch (textError) {
+      console.error(`Error processing text ${j + 1} in document ${documentIndex}:`, textError.message)
+      // Continue with other texts
+    }
   }
   
   // Process standalone German texts
-  for (const germanText of docData.standaloneGermanTexts || []) {
-    await processStandaloneGermanText(document.id, germanText)
+  const germanTexts = docData.standaloneGermanTexts || []
+  for (const germanText of germanTexts) {
+    try {
+      await processStandaloneGermanText(document.id, germanText)
+    } catch (germanError) {
+      console.error(`Error processing German text in document ${documentIndex}:`, germanError.message)
+    }
   }
+  
+  return { skipped: false }
 }
 
-async function processText(documentId, textData) {
+async function processText(documentId, textData, textIndex) {
   const header = textData.headerInformation || {}
   const germanTrans = textData.germanTranslation || {}
   const originalRef = textData.originalSourceReference || {}
@@ -95,30 +157,31 @@ async function processText(documentId, textData) {
     processingStatus = 'needs_manual'
   }
   
-  // Insert text
+  // Insert text - keep ALL fields, use empty string for required field if missing
   const { data: text, error: textError } = await supabase
     .from('texts')
     .insert({
       document_id: documentId,
-      title: header.title,
-      subtitle: header.subtitle,
-      author: header.author,
-      translator: header.translator,
-      editor_corrector: header.editorCorrector,
-      series_info: header.seriesInfo,
-      translation_available: header.translationAvailable,
-      text_quality: header.textQuality,
-      editorial_introduction: textData.editorialIntroduction,
-      complete_helgolandic_text: textData.completeHelgolandicText,
-      german_translation_location: germanTrans.location,
-      german_translation_text: germanTrans.fullText,
-      german_translation_source_publication: germanTrans.sourcePublication,
-      original_source_title: originalRef.title,
-      original_source_author: originalRef.author,
-      original_source_publication_info: originalRef.publicationInfo,
+      title: header.title || null,
+      subtitle: header.subtitle || null,
+      author: header.author || null,
+      translator: header.translator || null,
+      editor_corrector: header.editorCorrector || null,
+      series_info: header.seriesInfo || null,
+      translation_available: header.translationAvailable || null,
+      text_quality: header.textQuality || null,
+      editorial_introduction: textData.editorialIntroduction || null,
+      // Use empty string if completeHelgolandicText is missing (since it's required)
+      complete_helgolandic_text: textData.completeHelgolandicText || '',
+      german_translation_location: germanTrans.location || null,
+      german_translation_text: germanTrans.fullText || null,
+      german_translation_source_publication: germanTrans.sourcePublication || null,
+      original_source_title: originalRef.title || null,
+      original_source_author: originalRef.author || null,
+      original_source_publication_info: originalRef.publicationInfo || null,
       processing_status: processingStatus,
-      continuation_note: textData.crossReferences?.continuation,
-      previous_episode: textData.crossReferences?.previousEpisode,
+      continuation_note: textData.crossReferences?.continuation || null,
+      previous_episode: textData.crossReferences?.previousEpisode || null,
       page_break_notes: textData.pageBreakNotes || []
     })
     .select()
@@ -128,16 +191,21 @@ async function processText(documentId, textData) {
     throw new Error(`Failed to insert text: ${textError.message}`)
   }
   
-  // Insert translation aids
-  for (const aid of textData.uebersetzungshilfen || []) {
-    await supabase
-      .from('translation_aids')
-      .insert({
-        text_id: text.id,
-        number: aid.number,
-        term: aid.term,
-        explanation: aid.explanation
-      })
+  // Insert translation aids - keep empty fields as NULL
+  const aids = textData.uebersetzungshilfen || []
+  for (const aid of aids) {
+    try {
+      await supabase
+        .from('translation_aids')
+        .insert({
+          text_id: text.id,
+          number: aid.number || null,
+          term: aid.term || null,
+          explanation: aid.explanation || null
+        })
+    } catch (aidError) {
+      console.error('Error inserting translation aid:', aidError.message)
+    }
   }
   
   // Add to processing queue
@@ -149,23 +217,31 @@ async function processText(documentId, textData) {
   
   const queueType = queueTypeMap[processingStatus]
   if (queueType) {
-    await supabase
-      .from('processing_queue')
-      .insert({
-        text_id: text.id,
-        queue_type: queueType,
-        priority: 1
-      })
+    try {
+      await supabase
+        .from('processing_queue')
+        .insert({
+          text_id: text.id,
+          queue_type: queueType,
+          priority: 1
+        })
+    } catch (queueError) {
+      console.error('Error adding to queue:', queueError.message)
+    }
   }
 }
 
 async function processStandaloneGermanText(documentId, germanText) {
-  await supabase
-    .from('standalone_german_texts')
-    .insert({
-      document_id: documentId,
-      title: germanText.title,
-      full_text: germanText.fullText,
-      helgolandic_source_note: germanText.helgolandicSourceNote
-    })
+  try {
+    await supabase
+      .from('standalone_german_texts')
+      .insert({
+        document_id: documentId,
+        title: germanText.title || null,
+        full_text: germanText.fullText || null,
+        helgolandic_source_note: germanText.helgolandicSourceNote || null
+      })
+  } catch (error) {
+    console.error('Error inserting standalone German text:', error.message)
+  }
 }
