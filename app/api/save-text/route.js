@@ -33,24 +33,32 @@ export async function POST(request) {
       return Response.json({ error: 'Text ID is required' }, { status: 400 })
     }
 
+    // Helper function to convert empty strings to null
+    const nullifyEmpty = (value) => {
+      if (value === '' || value === 'null' || value === undefined) {
+        return null
+      }
+      return value
+    }
+
     // Update the main text
     const { data: textData, error: textError } = await supabase
       .from('texts')
       .update({
-        title,
-        subtitle,
-        author,
-        translator,
-        editor_corrector,
-        series_info,
-        text_quality,
-        complete_helgolandic_text,
-        german_translation_text,
-        editorial_introduction,
-        german_translation_location,
-        original_source_title,
-        original_source_author,
-        original_source_publication_info,
+        title: nullifyEmpty(title),
+        subtitle: nullifyEmpty(subtitle),
+        author: nullifyEmpty(author),
+        translator: nullifyEmpty(translator),
+        editor_corrector: nullifyEmpty(editor_corrector),
+        series_info: nullifyEmpty(series_info),
+        text_quality: nullifyEmpty(text_quality),
+        complete_helgolandic_text: complete_helgolandic_text || '',
+        german_translation_text: nullifyEmpty(german_translation_text),
+        editorial_introduction: nullifyEmpty(editorial_introduction),
+        german_translation_location: nullifyEmpty(german_translation_location),
+        original_source_title: nullifyEmpty(original_source_title),
+        original_source_author: nullifyEmpty(original_source_author),
+        original_source_publication_info: nullifyEmpty(original_source_publication_info),
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
@@ -67,15 +75,15 @@ export async function POST(request) {
       const { error: docError } = await supabase
         .from('documents')
         .update({
-          publication: document_metadata.publication,
-          date: document_metadata.date,
-          year: document_metadata.year,
-          month: document_metadata.month,
-          edition: document_metadata.edition,
-          issue_number: document_metadata.issue_number,
-          page_numbers: document_metadata.page_numbers,
-          source_file: document_metadata.source_file,
-          halunder_sentence_count: document_metadata.halunder_sentence_count,
+          publication: nullifyEmpty(document_metadata.publication),
+          date: nullifyEmpty(document_metadata.date),
+          year: document_metadata.year ? parseInt(document_metadata.year) : null,
+          month: nullifyEmpty(document_metadata.month),
+          edition: nullifyEmpty(document_metadata.edition),
+          issue_number: document_metadata.issue_number ? parseInt(document_metadata.issue_number) : null,
+          page_numbers: nullifyEmpty(document_metadata.page_numbers),
+          source_file: nullifyEmpty(document_metadata.source_file),
+          halunder_sentence_count: document_metadata.halunder_sentence_count ? parseInt(document_metadata.halunder_sentence_count) : null,
           updated_at: new Date().toISOString()
         })
         .eq('id', textData.document_id)
@@ -102,7 +110,7 @@ export async function POST(request) {
       if (validAids.length > 0) {
         const aidsToInsert = validAids.map(aid => ({
           text_id: id,
-          number: aid.number || null,
+          number: nullifyEmpty(aid.number),
           term: aid.term.trim(),
           explanation: aid.explanation.trim()
         }))
