@@ -21,8 +21,12 @@ export async function POST(request) {
     try {
       parsedData = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData
     } catch (parseError) {
-      return Response.json({ error: 'Invalid JSON format' }, { status: 400 })
+      console.error('JSON parse error:', parseError)
+      return Response.json({ error: 'Invalid JSON format: ' + parseError.message }, { status: 400 })
     }
+
+    console.log('Processing data for textId:', textId)
+    console.log('Parsed data keys:', Object.keys(parsedData))
 
     const processed = {
       parallelSentences: 0,
@@ -30,23 +34,29 @@ export async function POST(request) {
       linguisticFeatures: 0
     }
 
+    // Clear existing data for this text first
+    await clearExistingData(textId)
+
     // Process parallel sentences
     if (parsedData.sentencePairs && Array.isArray(parsedData.sentencePairs)) {
-      const parallelData = parsedData.sentencePairs.map((pair, index) => ({
-        source_text_id: textId,
-        halunder_sentence: pair.halunder,
-        german_sentence: pair.german,
-        sentence_order: index + 1,
-        source_type: 'manual'
-      }))
+      console.log('Processing', parsedData.sentencePairs.length, 'sentence pairs')
+      
+      const parallelData = parsedData.sentencePairs
+        .filter(pair => pair.halunder && pair.german) // Only include pairs with both sentences
+        .map((pair, index) => ({
+          source_text_id: textId,
+          halunder_sentence: pair.halunder.trim(),
+          german_sentence: pair.german.trim(),
+          sentence_order: index + 1,
+          source_type: 'manual'
+        }))
 
       if (parallelData.length > 0) {
+        console.log('Inserting', parallelData.length, 'parallel sentences')
+        
         const { error: parallelError } = await supabase
           .from('parallel_corpus')
-          .upsert(parallelData, { 
-            onConflict: 'source_text_id,sentence_order',
-            ignoreDuplicates: false 
-          })
+          .insert(parallelData)
 
         if (parallelError) {
           console.error('Parallel corpus error:', parallelError)
@@ -54,28 +64,34 @@ export async function POST(request) {
         }
 
         processed.parallelSentences = parallelData.length
+        console.log('Successfully inserted parallel sentences')
       }
     }
 
     // Process monolingual sentences (additional sentences)
     if (parsedData.additionalSentences && Array.isArray(parsedData.additionalSentences)) {
+      console.log('Processing', parsedData.additionalSentences.length, 'additional sentences')
+      
       const monolingualData = parsedData.additionalSentences
-        .filter(sentence => sentence.language?.toLowerCase() === 'halunder')
+        .filter(sentence => 
+          sentence.language?.toLowerCase() === 'halunder' && 
+          sentence.sentence && 
+          sentence.sentence.trim()
+        )
         .map((sentence, index) => ({
           source_text_id: textId,
-          halunder_sentence: sentence.sentence,
+          halunder_sentence: sentence.sentence.trim(),
           context_note: sentence.context || null,
           sentence_order: index + 1,
           translation_status: 'pending'
         }))
 
       if (monolingualData.length > 0) {
+        console.log('Inserting', monolingualData.length, 'monolingual sentences')
+        
         const { error: monoError } = await supabase
           .from('monolingual_corpus')
-          .upsert(monolingualData, { 
-            onConflict: 'source_text_id,sentence_order',
-            ignoreDuplicates: false 
-          })
+          .insert(monolingualData)
 
         if (monoError) {
           console.error('Monolingual corpus error:', monoError)
@@ -83,26 +99,30 @@ export async function POST(request) {
         }
 
         processed.monolingualSentences = monolingualData.length
+        console.log('Successfully inserted monolingual sentences')
       }
     }
 
     // Process linguistic features
     if (parsedData.linguisticFeatures && Array.isArray(parsedData.linguisticFeatures)) {
-      const featuresData = parsedData.linguisticFeatures.map(feature => ({
-        source_text_id: textId,
-        halunder_term: feature.halunder_term,
-        german_equivalent: feature.german_equivalent || null,
-        explanation: feature.explanation,
-        feature_type: feature.type ? feature.type.toLowerCase() : 'other'
-      }))
+      console.log('Processing', parsedData.linguisticFeatures.length, 'linguistic features')
+      
+      const featuresData = parsedData.linguisticFeatures
+        .filter(feature => feature.halunder_term && feature.explanation) // Only include features with required fields
+        .map(feature => ({
+          source_text_id: textId,
+          halunder_term: feature.halunder_term.trim(),
+          german_equivalent: feature.german_equivalent ? feature.german_equivalent.trim() : null,
+          explanation: feature.explanation.trim(),
+          feature_type: feature.type ? feature.type.toLowerCase() : 'other'
+        }))
 
       if (featuresData.length > 0) {
+        console.log('Inserting', featuresData.length, 'linguistic features')
+        
         const { error: featuresError } = await supabase
           .from('linguistic_features')
-          .upsert(featuresData, { 
-            onConflict: 'source_text_id,halunder_term',
-            ignoreDuplicates: false 
-          })
+          .insert(featuresData)
 
         if (featuresError) {
           console.error('Linguistic features error:', featuresError)
@@ -110,6 +130,7 @@ export async function POST(request) {
         }
 
         processed.linguisticFeatures = featuresData.length
+        console.log('Successfully inserted linguistic features')
 
         // Update vocabulary tracker
         for (const feature of featuresData) {
@@ -117,6 +138,8 @@ export async function POST(request) {
         }
       }
     }
+
+    console.log('Processing completed successfully:', processed)
 
     return Response.json({ 
       success: true, 
@@ -130,13 +153,33 @@ export async function POST(request) {
   }
 }
 
+async function clearExistingData(textId) {
+  try {
+    console.log('Clearing existing data for textId:', textId)
+    
+    // Delete existing records for this text
+    await supabase.from('parallel_corpus').delete().eq('source_text_id', textId)
+    await supabase.from('monolingual_corpus').delete().eq('source_text_id', textId)
+    await supabase.from('linguistic_features').delete().eq('source_text_id', textId)
+    
+    console.log('Existing data cleared')
+  } catch (error) {
+    console.error('Error clearing existing data:', error)
+    // Don't fail the operation for cleanup errors
+  }
+}
+
 async function updateVocabularyTracker(halunderWord, germanTranslation) {
   try {
+    if (!halunderWord || !halunderWord.trim()) return
+    
+    const word = halunderWord.trim().toLowerCase()
+    
     // Check if word exists
     const { data: existing } = await supabase
       .from('vocabulary_tracker')
       .select('*')
-      .eq('halunder_word', halunderWord)
+      .eq('halunder_word', word)
       .single()
 
     if (existing) {
@@ -153,13 +196,13 @@ async function updateVocabularyTracker(halunderWord, germanTranslation) {
           german_translations: translations,
           last_seen_at: new Date().toISOString()
         })
-        .eq('halunder_word', halunderWord)
+        .eq('halunder_word', word)
     } else {
       // Create new entry
       await supabase
         .from('vocabulary_tracker')
         .insert({
-          halunder_word: halunderWord,
+          halunder_word: word,
           german_translations: germanTranslation ? [germanTranslation] : [],
           frequency_count: 1
         })
