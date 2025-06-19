@@ -13,6 +13,12 @@ export default function TextReview() {
   const [bucketCounts, setBucketCounts] = useState({})
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   
+  // Sentence processing
+  const [showSentenceProcessor, setShowSentenceProcessor] = useState(false)
+  const [sentenceProcessing, setSentenceProcessing] = useState(false)
+  const [jsonInput, setJsonInput] = useState('')
+  const [processResult, setProcessResult] = useState(null)
+  
   // Editable text fields
   const [textFields, setTextFields] = useState({
     title: '',
@@ -98,6 +104,9 @@ export default function TextReview() {
       
       loadTranslationAids(currentText.id)
       setHasUnsavedChanges(false)
+      setShowSentenceProcessor(false)
+      setJsonInput('')
+      setProcessResult(null)
     }
   }, [currentText])
 
@@ -287,7 +296,7 @@ export default function TextReview() {
     setHasUnsavedChanges(true)
   }
 
-  // Copy to clipboard functionality
+  // Copy to clipboard functionality with JSON format instructions
   const copyToClipboard = async () => {
     if (!currentText) return
     
@@ -316,33 +325,49 @@ ${textFields.editorial_introduction || 'N/A'}
 **Translation Aids:**
 ${translationAidsText || 'N/A'}
 
-**Please provide three tables:**
+**Please provide your response as JSON in this exact format:**
 
-**Table 1: Sentence Pairs**
-| Halunder Sentence | German Sentence |
-|-------------------|----------------|
-| [sentence 1] | [translation 1] |
-| [sentence 2] | [translation 2] |
-
-**Table 2: Additional Sentences** (sentences that appear in only one language)
-| Language | Sentence | Context/Note |
-|----------|----------|--------------|
-| Halunder/German | [sentence] | [explanation] |
-
-**Table 3: Linguistic Features** (words/phrases for highlighting in translator)
-| Halunder Term | German Equivalent | Explanation | Type |
-|---------------|------------------|-------------|------|
-| [term] | [translation] | [detailed explanation] | [idiom/phrase/cultural/etc] |
+\`\`\`json
+{
+  "sentencePairs": [
+    {
+      "halunder": "First Halunder sentence",
+      "german": "First German sentence"
+    },
+    {
+      "halunder": "Second Halunder sentence", 
+      "german": "Second German sentence"
+    }
+  ],
+  "additionalSentences": [
+    {
+      "language": "halunder",
+      "sentence": "Halunder-only sentence",
+      "context": "Explanation of why this has no German equivalent"
+    }
+  ],
+  "linguisticFeatures": [
+    {
+      "halunder_term": "specific word or phrase",
+      "german_equivalent": "German translation",
+      "explanation": "Detailed explanation including etymology/cultural context",
+      "type": "idiom"
+    }
+  ]
+}
+\`\`\`
 
 Instructions:
 - Align sentences as accurately as possible
+- Include ALL Halunder sentences, even if they don't have direct German parallels
 - Mark any untranslatable or culturally specific terms
 - Include etymology or cultural context where relevant
-- Identify idiomatic expressions and their meanings`
+- Identify idiomatic expressions and their meanings
+- Type can be: idiom, phrase, cultural, etymology, grammar, other`
 
     try {
       await navigator.clipboard.writeText(prompt)
-      alert('Prompt copied to clipboard!')
+      alert('JSON prompt copied to clipboard!')
     } catch (err) {
       console.error('Failed to copy to clipboard:', err)
       // Fallback: show in a modal or textarea
@@ -352,7 +377,44 @@ Instructions:
       textarea.select()
       document.execCommand('copy')
       document.body.removeChild(textarea)
-      alert('Prompt copied to clipboard!')
+      alert('JSON prompt copied to clipboard!')
+    }
+  }
+
+  // Process JSON from LLM
+  const processSentenceJson = async () => {
+    if (!currentText || !jsonInput.trim()) {
+      setError('Please provide JSON data')
+      return
+    }
+
+    setSentenceProcessing(true)
+    setError('')
+    
+    try {
+      const response = await fetch('/api/process-sentences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          textId: currentText.id,
+          jsonData: jsonInput
+        })
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to process sentences')
+      }
+
+      setProcessResult(result)
+      setJsonInput('')
+      setShowSentenceProcessor(false)
+
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSentenceProcessing(false)
     }
   }
 
@@ -482,7 +544,7 @@ Instructions:
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {currentText ? (
           <>
-            {/* Header with save and copy buttons */}
+            {/* Header with buttons */}
             <div style={{ 
               padding: '20px', 
               backgroundColor: '#fff', 
@@ -517,22 +579,39 @@ Instructions:
               </h1>
               
               <div style={{ display: 'flex', gap: '10px' }}>
-                {/* Copy to Clipboard button - only show for parallel_confirmed texts */}
+                {/* Copy JSON Prompt button - only show for parallel_confirmed texts */}
                 {currentText.review_status === 'parallel_confirmed' && (
-                  <button
-                    onClick={copyToClipboard}
-                    style={{
-                      padding: '10px 20px',
-                      backgroundColor: '#17a2b8',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontWeight: 'bold'
-                    }}
-                  >
-                    📋 Copy Prompt
-                  </button>
+                  <>
+                    <button
+                      onClick={copyToClipboard}
+                      style={{
+                        padding: '10px 20px',
+                        backgroundColor: '#17a2b8',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      📋 Copy JSON Prompt
+                    </button>
+                    
+                    <button
+                      onClick={() => setShowSentenceProcessor(!showSentenceProcessor)}
+                      style={{
+                        padding: '10px 20px',
+                        backgroundColor: showSentenceProcessor ? '#fd7e14' : '#6f42c1',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      {showSentenceProcessor ? '✕ Close' : '⚡ Process Sentences'}
+                    </button>
+                  </>
                 )}
                 
                 <button
@@ -552,6 +631,21 @@ Instructions:
                 </button>
               </div>
             </div>
+
+            {/* Process Result Display */}
+            {processResult && (
+              <div style={{
+                padding: '15px 20px',
+                backgroundColor: '#e8f5e8',
+                color: '#2e7d32',
+                borderBottom: '1px solid #ddd'
+              }}>
+                <strong>✓ Sentences Processed Successfully!</strong><br />
+                Parallel: {processResult.processed.parallelSentences}, 
+                Monolingual: {processResult.processed.monolingualSentences}, 
+                Features: {processResult.processed.linguisticFeatures}
+              </div>
+            )}
             
             {error && (
               <div style={{
@@ -564,7 +658,62 @@ Instructions:
               </div>
             )}
 
-            {/* Main editing area */}
+            {/* Sentence Processor Panel */}
+            {showSentenceProcessor && (
+              <div style={{
+                padding: '20px',
+                backgroundColor: '#f8f9fa',
+                borderBottom: '1px solid #ddd'
+              }}>
+                <h3 style={{ margin: '0 0 15px 0' }}>Paste JSON Response from LLM</h3>
+                <textarea
+                  value={jsonInput}
+                  onChange={(e) => setJsonInput(e.target.value)}
+                  style={{
+                    width: '100%',
+                    height: '150px',
+                    padding: '10px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                    fontFamily: 'monospace',
+                    fontSize: '14px'
+                  }}
+                  placeholder="Paste the JSON response from Claude here..."
+                />
+                <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
+                  <button
+                    onClick={processSentenceJson}
+                    disabled={sentenceProcessing || !jsonInput.trim()}
+                    style={{
+                      padding: '10px 20px',
+                      backgroundColor: sentenceProcessing ? '#ccc' : '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: sentenceProcessing ? 'not-allowed' : 'pointer',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    {sentenceProcessing ? 'Processing...' : 'Process JSON'}
+                  </button>
+                  <button
+                    onClick={() => setJsonInput('')}
+                    style={{
+                      padding: '10px 20px',
+                      backgroundColor: '#6c757d',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Main editing area - rest of the form stays the same */}
             <div style={{ flex: 1, padding: '20px', overflow: 'auto' }}>
               
               {/* Text Metadata */}
