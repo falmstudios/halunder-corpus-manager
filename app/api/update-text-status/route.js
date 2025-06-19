@@ -13,9 +13,23 @@ export async function POST(request) {
       return Response.json({ error: 'ID and status are required' }, { status: 400 })
     }
 
-    // Validate status
-    const validStatuses = ['pending', 'parallel_confirmed', 'german_available', 'halunder_only', 'deleted']
-    if (!validStatuses.includes(status)) {
+    // Check if it's a valid default status
+    const validDefaultStatuses = ['pending', 'parallel_confirmed', 'german_available', 'halunder_only', 'deleted']
+    
+    let isValidStatus = validDefaultStatuses.includes(status)
+    
+    // If not a default status, check if it's a custom bucket
+    if (!isValidStatus) {
+      const { data: customBucket } = await supabase
+        .from('custom_buckets')
+        .select('bucket_key')
+        .eq('bucket_key', status)
+        .single()
+      
+      isValidStatus = !!customBucket
+    }
+    
+    if (!isValidStatus) {
       return Response.json({ error: 'Invalid status' }, { status: 400 })
     }
 
