@@ -11,6 +11,7 @@ export default function TextReview() {
   const [selectedBucket, setSelectedBucket] = useState('pending')
   const [searchTerm, setSearchTerm] = useState('')
   const [bucketCounts, setBucketCounts] = useState({})
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   
   // Editable text fields
   const [textFields, setTextFields] = useState({
@@ -61,7 +62,7 @@ export default function TextReview() {
   useEffect(() => {
     if (currentText) {
       // Set text fields
-      setTextFields({
+      const newTextFields = {
         title: currentText.title || '',
         subtitle: currentText.subtitle || '',
         author: currentText.author || '',
@@ -76,11 +77,12 @@ export default function TextReview() {
         original_source_title: currentText.original_source_title || '',
         original_source_author: currentText.original_source_author || '',
         original_source_publication_info: currentText.original_source_publication_info || ''
-      })
+      }
+      setTextFields(newTextFields)
       
       // Set document fields
       if (currentText.documents) {
-        setDocumentFields({
+        const newDocumentFields = {
           publication: currentText.documents.publication || '',
           date: currentText.documents.date || '',
           year: currentText.documents.year || '',
@@ -90,10 +92,12 @@ export default function TextReview() {
           page_numbers: currentText.documents.page_numbers || '',
           source_file: currentText.documents.source_file || '',
           halunder_sentence_count: currentText.documents.halunder_sentence_count || ''
-        })
+        }
+        setDocumentFields(newDocumentFields)
       }
       
       loadTranslationAids(currentText.id)
+      setHasUnsavedChanges(false)
     }
   }, [currentText])
 
@@ -186,6 +190,8 @@ export default function TextReview() {
         }
       }))
       
+      setHasUnsavedChanges(false)
+      
     } catch (err) {
       setError(err.message)
     } finally {
@@ -195,6 +201,11 @@ export default function TextReview() {
 
   const updateTextStatus = async (status) => {
     if (!currentText) return
+    
+    // Auto-save before moving if there are unsaved changes
+    if (hasUnsavedChanges) {
+      await saveCurrentText()
+    }
     
     // Only confirm for delete
     if (status === 'deleted') {
@@ -218,9 +229,8 @@ export default function TextReview() {
         throw new Error(result.error || 'Failed to update status')
       }
       
-      // Reload texts and counts
-      await loadTexts()
-      await loadBucketCounts()
+      // Reload texts and counts immediately
+      await Promise.all([loadTexts(), loadBucketCounts()])
       
     } catch (err) {
       setError(err.message)
@@ -229,24 +239,98 @@ export default function TextReview() {
 
   const updateTextField = (field, value) => {
     setTextFields(prev => ({ ...prev, [field]: value }))
+    setHasUnsavedChanges(true)
   }
 
   const updateDocumentField = (field, value) => {
     setDocumentFields(prev => ({ ...prev, [field]: value }))
+    setHasUnsavedChanges(true)
   }
 
   const addTranslationAid = () => {
     setTranslationAids([...translationAids, { number: '', term: '', explanation: '' }])
+    setHasUnsavedChanges(true)
   }
 
   const updateTranslationAid = (index, field, value) => {
     const updated = [...translationAids]
     updated[index] = { ...updated[index], [field]: value }
     setTranslationAids(updated)
+    setHasUnsavedChanges(true)
   }
 
   const removeTranslationAid = (index) => {
     setTranslationAids(translationAids.filter((_, i) => i !== index))
+    setHasUnsavedChanges(true)
+  }
+
+  // Copy to clipboard functionality
+  const copyToClipboard = async () => {
+    if (!currentText) return
+    
+    const translationAidsText = translationAids
+      .filter(aid => aid.term && aid.explanation)
+      .map(aid => `${aid.number || ''}) ${aid.term}: ${aid.explanation}`)
+      .join('\n')
+    
+    const prompt = `Please analyze this Halunder (Helgolandic) text and create sentence-level alignments with German translation, plus extract linguistic features.
+
+**Text Information:**
+Title: ${textFields.title || 'N/A'}
+Author: ${textFields.author || 'N/A'}
+Translator: ${textFields.translator || 'N/A'}
+Source: ${documentFields.publication || 'N/A'} (${documentFields.year || 'N/A'})
+
+**Halunder Text:**
+${textFields.complete_helgolandic_text}
+
+**German Translation:**
+${textFields.german_translation_text}
+
+**Editorial Introduction:**
+${textFields.editorial_introduction || 'N/A'}
+
+**Translation Aids:**
+${translationAidsText || 'N/A'}
+
+**Please provide three tables:**
+
+**Table 1: Sentence Pairs**
+| Halunder Sentence | German Sentence |
+|-------------------|----------------|
+| [sentence 1] | [translation 1] |
+| [sentence 2] | [translation 2] |
+
+**Table 2: Additional Sentences** (sentences that appear in only one language)
+| Language | Sentence | Context/Note |
+|----------|----------|--------------|
+| Halunder/German | [sentence] | [explanation] |
+
+**Table 3: Linguistic Features** (words/phrases for highlighting in translator)
+| Halunder Term | German Equivalent | Explanation | Type |
+|---------------|------------------|-------------|------|
+| [term] | [translation] | [detailed explanation] | [idiom/phrase/cultural/etc] |
+
+Instructions:
+- Align sentences as accurately as possible
+- Mark any untranslatable or culturally specific terms
+- Include etymology or cultural context where relevant
+- Identify idiomatic expressions and their meanings`
+
+    try {
+      await navigator.clipboard.writeText(prompt)
+      alert('Prompt copied to clipboard!')
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err)
+      // Fallback: show in a modal or textarea
+      const textarea = document.createElement('textarea')
+      textarea.value = prompt
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+      alert('Prompt copied to clipboard!')
+    }
   }
 
   return (
@@ -375,7 +459,7 @@ export default function TextReview() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {currentText ? (
           <>
-            {/* Header with save button */}
+            {/* Header with save and copy buttons */}
             <div style={{ 
               padding: '20px', 
               backgroundColor: '#fff', 
@@ -398,23 +482,52 @@ export default function TextReview() {
                 }}>
                   {buckets[currentText.review_status || 'pending']?.label || 'Pending'}
                 </span>
+                {hasUnsavedChanges && (
+                  <span style={{ 
+                    marginLeft: '10px',
+                    color: '#ffc107',
+                    fontSize: '14px'
+                  }}>
+                    ● Unsaved changes
+                  </span>
+                )}
               </h1>
               
-              <button
-                onClick={saveCurrentText}
-                disabled={saving}
-                style={{
-                  padding: '10px 20px',
-                  backgroundColor: saving ? '#ccc' : '#28a745',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: saving ? 'not-allowed' : 'pointer',
-                  fontWeight: 'bold'
-                }}
-              >
-                {saving ? 'Saving...' : 'Save Changes'}
-              </button>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                {/* Copy to Clipboard button - only show for parallel_confirmed texts */}
+                {currentText.review_status === 'parallel_confirmed' && (
+                  <button
+                    onClick={copyToClipboard}
+                    style={{
+                      padding: '10px 20px',
+                      backgroundColor: '#17a2b8',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    📋 Copy Prompt
+                  </button>
+                )}
+                
+                <button
+                  onClick={saveCurrentText}
+                  disabled={saving}
+                  style={{
+                    padding: '10px 20px',
+                    backgroundColor: saving ? '#ccc' : '#28a745',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: saving ? 'not-allowed' : 'pointer',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
             </div>
             
             {error && (
