@@ -19,6 +19,12 @@ export default function TextReview() {
   const [jsonInput, setJsonInput] = useState('')
   const [processResult, setProcessResult] = useState(null)
   
+  // Processed sentences display
+  const [showProcessedSentences, setShowProcessedSentences] = useState(false)
+  const [parallelSentences, setParallelSentences] = useState([])
+  const [linguisticFeatures, setLinguisticFeatures] = useState([])
+  const [sentencesLoading, setSentencesLoading] = useState(false)
+  
   // Editable text fields
   const [textFields, setTextFields] = useState({
     title: '',
@@ -103,6 +109,7 @@ export default function TextReview() {
       }
       
       loadTranslationAids(currentText.id)
+      loadProcessedSentences(currentText.id)
       setHasUnsavedChanges(false)
       setShowSentenceProcessor(false)
       setJsonInput('')
@@ -166,106 +173,26 @@ export default function TextReview() {
     }
   }
 
-  const saveCurrentText = async () => {
-    if (!currentText) return
-    
-    setSaving(true)
-    setError('')
-    
+  const loadProcessedSentences = async (textId) => {
+    setSentencesLoading(true)
     try {
-      console.log('Saving text changes...', {
-        textId: currentText.id,
-        hasChanges: hasUnsavedChanges
-      })
-      
-      const response = await fetch('/api/save-text', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: currentText.id,
-          ...textFields,
-          translation_aids: translationAids,
-          document_metadata: documentFields
-        })
-      })
-      
-      const result = await response.json()
-      
-      if (!response.ok) {
-        console.error('Save failed:', result)
-        throw new Error(result.error || 'Failed to save')
-      }
-      
-      console.log('Save successful')
-      
-      // Update current text
-      setCurrentText(prev => ({
-        ...prev,
-        ...textFields,
-        documents: {
-          ...prev.documents,
-          ...documentFields
-        }
-      }))
-      
-      setHasUnsavedChanges(false)
-      
-    } catch (err) {
-      console.error('Save error:', err)
-      setError(err.message)
-      throw err // Re-throw so auto-save can handle it
-    } finally {
-      setSaving(false)
-    }
-  }
+      const [parallelResponse, featuresResponse] = await Promise.all([
+        fetch(`/api/corpus-data?textId=${textId}&type=parallel`),
+        fetch(`/api/corpus-data?textId=${textId}&type=features`)
+      ])
 
-  const updateTextStatus = async (status) => {
-    if (!currentText) return
-    
-    // Auto-save before moving if there are unsaved changes
-    if (hasUnsavedChanges) {
-      console.log('Auto-saving before status change...')
-      try {
-        await saveCurrentText()
-        console.log('Auto-save completed')
-      } catch (saveError) {
-        console.error('Auto-save failed:', saveError)
-        setError('Failed to save changes before moving to bucket. Please save manually first.')
-        return
-      }
-    }
-    
-    // Only confirm for delete
-    if (status === 'deleted') {
-      if (!confirm('Are you sure you want to mark this text as deleted?')) {
-        return
-      }
-    }
-    
-    try {
-      console.log('Updating status to:', status)
-      const response = await fetch('/api/update-text-status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: currentText.id,
-          status: status
-        })
-      })
-      
-      if (!response.ok) {
-        const result = await response.json()
-        throw new Error(result.error || 'Failed to update status')
-      }
-      
-      console.log('Status updated successfully')
-      
-      // Reload texts and counts immediately
-      await Promise.all([loadTexts(), loadBucketCounts()])
-      
+      const [parallelResult, featuresResult] = await Promise.all([
+        parallelResponse.json(),
+        featuresResponse.json()
+      ])
+
+      if (parallelResponse.ok) setParallelSentences(parallelResult.data || [])
+      if (featuresResponse.ok) setLinguisticFeatures(featuresResult.data || [])
+
     } catch (err) {
-      console.error('Status update error:', err)
-      setError(err.message)
+      console.error('Failed to load processed sentences:', err)
+    } finally {
+      setSentencesLoading(false)
     }
   }
 
@@ -279,33 +206,80 @@ export default function TextReview() {
     setHasUnsavedChanges(true)
   }
 
-  const addTranslationAid = () => {
-    setTranslationAids([...translationAids, { number: '', term: '', explanation: '' }])
-    setHasUnsavedChanges(true)
+  const selectText = (text) => {
+    setCurrentText(text)
   }
 
-  const updateTranslationAid = (index, field, value) => {
-    const updated = [...translationAids]
-    updated[index] = { ...updated[index], [field]: value }
-    setTranslationAids(updated)
-    setHasUnsavedChanges(true)
-  }
-
-  const removeTranslationAid = (index) => {
-    setTranslationAids(translationAids.filter((_, i) => i !== index))
-    setHasUnsavedChanges(true)
-  }
-
-  // Copy to clipboard functionality with JSON format instructions
-  const copyToClipboard = async () => {
+  const moveTextToBucket = async (bucketName) => {
     if (!currentText) return
     
-    const translationAidsText = translationAids
-      .filter(aid => aid.term && aid.explanation)
-      .map(aid => `${aid.number || ''}) ${aid.term}: ${aid.explanation}`)
-      .join('\n')
+    if (hasUnsavedChanges) {
+      await saveChanges()
+    }
     
-    const prompt = `Please analyze this Halunder (Helgolandic) text and create sentence-level alignments with German translation, plus extract linguistic features.
+    try {
+      const response = await fetch('/api/move-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          textId: currentText.id,
+          bucket: bucketName
+        })
+      })
+
+      if (!response.ok) {
+        const result = await response.json()
+        throw new Error(result.error || 'Failed to move text')
+      }
+
+      await loadBucketCounts()
+      await loadTexts()
+      
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const saveChanges = async () => {
+    if (!currentText) return
+    
+    setSaving(true)
+    setError('')
+    
+    try {
+      const response = await fetch('/api/update-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          textId: currentText.id,
+          textFields,
+          documentFields
+        })
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to save changes')
+      }
+
+      setHasUnsavedChanges(false)
+      
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const copyJsonPrompt = () => {
+    if (!currentText) return
+
+    const translationAidsText = translationAids
+      .map(aid => `${aid.number} ${aid.term}: ${aid.explanation}`)
+      .join('\n')
+
+    const prompt = `Please analyze this Halunder text and create parallel sentence pairs. Extract all sentence pairs between Halunder and German, identify additional Halunder-only sentences, and note linguistic features like idioms, cultural terms, and etymological information.
 
 **Text Information:**
 Title: ${textFields.title || 'N/A'}
@@ -366,11 +340,11 @@ Instructions:
 - Type can be: idiom, phrase, cultural, etymology, grammar, other`
 
     try {
-      await navigator.clipboard.writeText(prompt)
+      navigator.clipboard.writeText(prompt)
       alert('JSON prompt copied to clipboard!')
     } catch (err) {
       console.error('Failed to copy to clipboard:', err)
-      // Fallback: show in a modal or textarea
+      // Fallback
       const textarea = document.createElement('textarea')
       textarea.value = prompt
       document.body.appendChild(textarea)
@@ -381,7 +355,6 @@ Instructions:
     }
   }
 
-  // Process JSON from LLM
   const processSentenceJson = async () => {
     if (!currentText || !jsonInput.trim()) {
       setError('Please provide JSON data')
@@ -410,6 +383,9 @@ Instructions:
       setProcessResult(result)
       setJsonInput('')
       setShowSentenceProcessor(false)
+      
+      // Reload processed sentences
+      loadProcessedSentences(currentText.id)
 
     } catch (err) {
       setError(err.message)
@@ -463,6 +439,7 @@ Instructions:
                 backgroundColor: selectedBucket === key ? bucket.color : '#e9ecef',
                 color: selectedBucket === key ? 'white' : '#333',
                 cursor: 'pointer',
+                fontSize: '14px',
                 textAlign: 'left'
               }}
             >
@@ -478,20 +455,21 @@ Instructions:
             placeholder="Search texts..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && loadTexts()}
+            onKeyPress={(e) => e.key === 'Enter' && loadTexts()}
             style={{
               width: '100%',
               padding: '8px',
               border: '1px solid #ccc',
-              borderRadius: '4px'
+              borderRadius: '4px',
+              fontSize: '14px'
             }}
           />
           <button
             onClick={loadTexts}
             style={{
               width: '100%',
-              padding: '6px',
-              marginTop: '5px',
+              marginTop: '8px',
+              padding: '8px',
               backgroundColor: '#007bff',
               color: 'white',
               border: 'none',
@@ -506,33 +484,30 @@ Instructions:
         {/* Text List */}
         <div style={{ flex: 1, overflow: 'auto', padding: '10px' }}>
           {loading ? (
-            <div>Loading...</div>
-          ) : texts.length === 0 ? (
-            <div style={{ color: '#666', textAlign: 'center', padding: '20px' }}>
-              No texts found
-            </div>
+            <div style={{ textAlign: 'center', padding: '20px' }}>Loading...</div>
           ) : (
             texts.map(text => (
               <div
                 key={text.id}
-                onClick={() => setCurrentText(text)}
+                onClick={() => selectText(text)}
                 style={{
                   padding: '10px',
                   margin: '5px 0',
+                  backgroundColor: currentText?.id === text.id ? '#e3f2fd' : 'white',
                   border: '1px solid #ddd',
                   borderRadius: '4px',
                   cursor: 'pointer',
-                  backgroundColor: currentText?.id === text.id ? '#e3f2fd' : 'white'
+                  fontSize: '12px'
                 }}
               >
-                <div style={{ fontWeight: 'bold', fontSize: '14px' }}>
+                <div style={{ fontWeight: 'bold' }}>
                   {text.title || 'Untitled'}
                 </div>
-                <div style={{ fontSize: '12px', color: '#666' }}>
-                  {text.author && `by ${text.author}`}
-                </div>
-                <div style={{ fontSize: '11px', color: '#999', marginTop: '5px' }}>
-                  {text.complete_helgolandic_text?.substring(0, 50)}...
+                {text.author && (
+                  <div style={{ color: '#666' }}>by {text.author}</div>
+                )}
+                <div style={{ color: '#999', fontSize: '11px' }}>
+                  {text.documents?.publication} ({text.documents?.year})
                 </div>
               </div>
             ))
@@ -541,181 +516,276 @@ Instructions:
       </div>
 
       {/* Main Content */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {currentText ? (
-          <>
-            {/* Header with buttons */}
-            <div style={{ 
-              padding: '20px', 
-              backgroundColor: '#fff', 
-              borderBottom: '1px solid #ddd',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <h1 style={{ margin: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        
+        {/* Top Bar with Actions */}
+        {currentText && (
+          <div style={{ 
+            padding: '15px 20px', 
+            backgroundColor: '#fff', 
+            borderBottom: '1px solid #ddd',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '10px'
+          }}>
+            <div>
+              <h3 style={{ margin: 0 }}>
                 {textFields.title || 'Untitled Text'}
-                <span style={{ 
-                  marginLeft: '15px',
-                  padding: '4px 12px',
-                  borderRadius: '12px',
-                  backgroundColor: buckets[currentText.review_status || 'pending']?.color || '#ccc',
-                  color: 'white',
-                  fontSize: '14px',
-                  fontWeight: 'normal'
-                }}>
-                  {buckets[currentText.review_status || 'pending']?.label || 'Pending'}
-                </span>
-                {hasUnsavedChanges && (
-                  <span style={{ 
-                    marginLeft: '10px',
-                    color: '#ffc107',
-                    fontSize: '14px'
-                  }}>
-                    ● Unsaved changes
-                  </span>
-                )}
-              </h1>
-              
-              <div style={{ display: 'flex', gap: '10px' }}>
-                {/* Copy JSON Prompt button - only show for parallel_confirmed texts */}
-                {currentText.review_status === 'parallel_confirmed' && (
-                  <>
-                    <button
-                      onClick={copyToClipboard}
-                      style={{
-                        padding: '10px 20px',
-                        backgroundColor: '#17a2b8',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontWeight: 'bold'
-                      }}
-                    >
-                      📋 Copy JSON Prompt
-                    </button>
-                    
-                    <button
-                      onClick={() => setShowSentenceProcessor(!showSentenceProcessor)}
-                      style={{
-                        padding: '10px 20px',
-                        backgroundColor: showSentenceProcessor ? '#fd7e14' : '#6f42c1',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontWeight: 'bold'
-                      }}
-                    >
-                      {showSentenceProcessor ? '✕ Close' : '⚡ Process Sentences'}
-                    </button>
-                  </>
-                )}
-                
-                <button
-                  onClick={saveCurrentText}
-                  disabled={saving}
-                  style={{
-                    padding: '10px 20px',
-                    backgroundColor: saving ? '#ccc' : '#28a745',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: saving ? 'not-allowed' : 'pointer',
-                    fontWeight: 'bold'
-                  }}
-                >
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
+              </h3>
+              {textFields.author && (
+                <div style={{ color: '#666', fontSize: '14px' }}>by {textFields.author}</div>
+              )}
             </div>
-
-            {/* Process Result Display */}
-            {processResult && (
-              <div style={{
-                padding: '15px 20px',
-                backgroundColor: '#e8f5e8',
-                color: '#2e7d32',
-                borderBottom: '1px solid #ddd'
-              }}>
-                <strong>✓ Sentences Processed Successfully!</strong><br />
-                Parallel: {processResult.processed.parallelSentences}, 
-                Monolingual: {processResult.processed.monolingualSentences}, 
-                Features: {processResult.processed.linguisticFeatures}
-              </div>
-            )}
             
-            {error && (
-              <div style={{
-                padding: '10px 20px',
-                backgroundColor: '#ffebee',
-                color: '#c62828',
-                borderBottom: '1px solid #ddd'
-              }}>
-                {error}
-              </div>
-            )}
-
-            {/* Sentence Processor Panel */}
-            {showSentenceProcessor && (
-              <div style={{
-                padding: '20px',
-                backgroundColor: '#f8f9fa',
-                borderBottom: '1px solid #ddd'
-              }}>
-                <h3 style={{ margin: '0 0 15px 0' }}>Paste JSON Response from LLM</h3>
-                <textarea
-                  value={jsonInput}
-                  onChange={(e) => setJsonInput(e.target.value)}
-                  style={{
-                    width: '100%',
-                    height: '150px',
-                    padding: '10px',
-                    border: '1px solid #ccc',
-                    borderRadius: '4px',
-                    fontFamily: 'monospace',
-                    fontSize: '14px'
-                  }}
-                  placeholder="Paste the JSON response from Claude here..."
-                />
-                <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
-                  <button
-                    onClick={processSentenceJson}
-                    disabled={sentenceProcessing || !jsonInput.trim()}
-                    style={{
-                      padding: '10px 20px',
-                      backgroundColor: sentenceProcessing ? '#ccc' : '#28a745',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: sentenceProcessing ? 'not-allowed' : 'pointer',
-                      fontWeight: 'bold'
-                    }}
-                  >
-                    {sentenceProcessing ? 'Processing...' : 'Process JSON'}
-                  </button>
-                  <button
-                    onClick={() => setJsonInput('')}
-                    style={{
-                      padding: '10px 20px',
-                      backgroundColor: '#6c757d',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Main editing area - rest of the form stays the same */}
-            <div style={{ flex: 1, padding: '20px', overflow: 'auto' }}>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => setShowProcessedSentences(!showProcessedSentences)}
+                disabled={parallelSentences.length === 0}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: parallelSentences.length > 0 ? '#6f42c1' : '#ccc',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: parallelSentences.length > 0 ? 'pointer' : 'not-allowed',
+                  fontSize: '14px'
+                }}
+              >
+                {showProcessedSentences ? 'Hide' : 'Show'} Processed Sentences ({parallelSentences.length})
+              </button>
               
+              {currentText.review_status === 'parallel_confirmed' && (
+                <>
+                  <button
+                    onClick={copyJsonPrompt}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#fd7e14',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '14px'
+                    }}
+                  >
+                    Copy JSON Prompt
+                  </button>
+                  <button
+                    onClick={() => setShowSentenceProcessor(!showSentenceProcessor)}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '14px'
+                    }}
+                  >
+                    {showSentenceProcessor ? 'Hide' : 'Process'} Sentences
+                  </button>
+                </>
+              )}
+              
+              <button
+                onClick={saveChanges}
+                disabled={saving}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: saving ? '#ccc' : '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Process Result Display */}
+        {processResult && (
+          <div style={{
+            padding: '15px 20px',
+            backgroundColor: '#e8f5e8',
+            color: '#2e7d32',
+            borderBottom: '1px solid #ddd'
+          }}>
+            <strong>✓ Sentences Processed Successfully!</strong><br />
+            Parallel: {processResult.processed.parallelSentences}, 
+            Monolingual: {processResult.processed.monolingualSentences}, 
+            Features: {processResult.processed.linguisticFeatures}
+          </div>
+        )}
+        
+        {error && (
+          <div style={{
+            padding: '10px 20px',
+            backgroundColor: '#ffebee',
+            color: '#c62828',
+            borderBottom: '1px solid #ddd'
+          }}>
+            {error}
+          </div>
+        )}
+
+        {/* Sentence Processor Panel */}
+        {showSentenceProcessor && (
+          <div style={{
+            padding: '20px',
+            backgroundColor: '#f8f9fa',
+            borderBottom: '1px solid #ddd'
+          }}>
+            <h3 style={{ margin: '0 0 15px 0' }}>Paste JSON Response from LLM</h3>
+            <textarea
+              value={jsonInput}
+              onChange={(e) => setJsonInput(e.target.value)}
+              style={{
+                width: '100%',
+                height: '150px',
+                padding: '10px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                fontFamily: 'monospace',
+                fontSize: '14px'
+              }}
+              placeholder="Paste the JSON response from Claude here..."
+            />
+            <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
+              <button
+                onClick={processSentenceJson}
+                disabled={sentenceProcessing || !jsonInput.trim()}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: sentenceProcessing ? '#ccc' : '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: sentenceProcessing ? 'not-allowed' : 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                {sentenceProcessing ? 'Processing...' : 'Process JSON'}
+              </button>
+              <button
+                onClick={() => setJsonInput('')}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Processed Sentences Display */}
+        {showProcessedSentences && currentText && (
+          <div style={{
+            padding: '20px',
+            backgroundColor: '#f0f8ff',
+            borderBottom: '1px solid #ddd',
+            maxHeight: '400px',
+            overflow: 'auto'
+          }}>
+            <h3 style={{ margin: '0 0 15px 0' }}>
+              Processed Sentences for "{textFields.title || 'Untitled'}"
+            </h3>
+            
+            {sentencesLoading ? (
+              <div style={{ textAlign: 'center', padding: '20px' }}>Loading processed sentences...</div>
+            ) : parallelSentences.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                No processed sentences found. Use the "Process Sentences" button above to generate them.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gap: '15px' }}>
+                {parallelSentences.map((sentence, index) => (
+                  <div key={sentence.id} style={{
+                    padding: '15px',
+                    border: '1px solid #ccc',
+                    borderRadius: '8px',
+                    backgroundColor: 'white'
+                  }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                      <div>
+                        <strong style={{ color: '#007bff' }}>Halunder:</strong>
+                        <p style={{ margin: '5px 0', fontFamily: 'Georgia, serif', fontSize: '14px' }}>
+                          {sentence.halunder_sentence}
+                        </p>
+                      </div>
+                      <div>
+                        <strong style={{ color: '#28a745' }}>German:</strong>
+                        <p style={{ margin: '5px 0', fontFamily: 'Georgia, serif', fontSize: '14px' }}>
+                          {sentence.german_sentence}
+                        </p>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: '10px', fontSize: '12px', color: '#666', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Order: {sentence.sentence_order} | Type: {sentence.source_type}</span>
+                      {sentence.confidence_score && <span>Confidence: {sentence.confidence_score}</span>}
+                    </div>
+                  </div>
+                ))}
+                
+                {linguisticFeatures.length > 0 && (
+                  <div style={{ marginTop: '20px' }}>
+                    <h4 style={{ margin: '0 0 10px 0', color: '#6f42c1' }}>Linguistic Features ({linguisticFeatures.length})</h4>
+                    <div style={{ display: 'grid', gap: '10px' }}>
+                      {linguisticFeatures.map((feature, index) => (
+                        <div key={feature.id} style={{
+                          padding: '10px',
+                          border: '1px solid #ddd',
+                          borderRadius: '6px',
+                          backgroundColor: '#fafafa',
+                          fontSize: '13px'
+                        }}>
+                          <div style={{ marginBottom: '5px' }}>
+                            <strong style={{ color: '#007bff' }}>{feature.halunder_term}</strong>
+                            {feature.german_equivalent && (
+                              <span style={{ marginLeft: '10px', color: '#28a745' }}>
+                                → {feature.german_equivalent}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontStyle: 'italic', color: '#555' }}>
+                            {feature.explanation}
+                          </div>
+                          {feature.feature_type && (
+                            <div style={{ marginTop: '5px', fontSize: '11px', color: '#888' }}>
+                              Type: {feature.feature_type}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Main editing area */}
+        <div style={{ flex: 1, padding: '20px', overflow: 'auto' }}>
+          
+          {!currentText ? (
+            <div style={{ textAlign: 'center', padding: '50px', color: '#666' }}>
+              <h3>Select a text to review</h3>
+              <p>Choose a text from the sidebar to start reviewing.</p>
+            </div>
+          ) : (
+            <>
               {/* Text Metadata */}
               <div style={{ marginBottom: '30px' }}>
                 <h3 style={{ marginBottom: '15px', color: '#333' }}>Text Metadata</h3>
@@ -772,68 +842,19 @@ Instructions:
                       onChange={(e) => updateTextField('text_quality', e.target.value)}
                       style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
                     >
-                      <option value="">Select...</option>
+                      <option value="">Select quality...</option>
                       <option value="professional">Professional</option>
                       <option value="colloquial">Colloquial</option>
                       <option value="scholarly">Scholarly</option>
                       <option value="literary">Literary</option>
                     </select>
                   </div>
-                  <div>
-                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>German Translation Location:</label>
-                    <select
-                      value={textFields.german_translation_location}
-                      onChange={(e) => updateTextField('german_translation_location', e.target.value)}
-                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-                    >
-                      <option value="">Select...</option>
-                      <option value="Side-by-side with Helgolandic">Side-by-side with Helgolandic</option>
-                      <option value="Following the Helgolandic text">Following the Helgolandic text</option>
-                      <option value="On a different page">On a different page</option>
-                      <option value="In a separate publication">In a separate publication</option>
-                      <option value="Not present on this page">Not present on this page</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Original Source Reference */}
-              <div style={{ marginBottom: '30px' }}>
-                <h3 style={{ marginBottom: '15px', color: '#333' }}>Original Source Reference</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '15px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Original Title:</label>
-                    <input
-                      type="text"
-                      value={textFields.original_source_title}
-                      onChange={(e) => updateTextField('original_source_title', e.target.value)}
-                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Original Author:</label>
-                    <input
-                      type="text"
-                      value={textFields.original_source_author}
-                      onChange={(e) => updateTextField('original_source_author', e.target.value)}
-                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-                    />
-                  </div>
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Publication Info:</label>
-                    <input
-                      type="text"
-                      value={textFields.original_source_publication_info}
-                      onChange={(e) => updateTextField('original_source_publication_info', e.target.value)}
-                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-                    />
-                  </div>
                 </div>
               </div>
 
               {/* Document Metadata */}
               <div style={{ marginBottom: '30px' }}>
-                <h3 style={{ marginBottom: '15px', color: '#333' }}>Document Metadata</h3>
+                <h3 style={{ marginBottom: '15px', color: '#333' }}>Document Information</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
                   <div>
                     <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Publication:</label>
@@ -854,29 +875,11 @@ Instructions:
                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Month:</label>
-                    <input
-                      type="text"
-                      value={documentFields.month}
-                      onChange={(e) => updateDocumentField('month', e.target.value)}
-                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-                    />
-                  </div>
-                  <div>
                     <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Edition:</label>
                     <input
                       type="text"
                       value={documentFields.edition}
                       onChange={(e) => updateDocumentField('edition', e.target.value)}
-                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Issue Number:</label>
-                    <input
-                      type="number"
-                      value={documentFields.issue_number}
-                      onChange={(e) => updateDocumentField('issue_number', e.target.value)}
                       style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
                     />
                   </div>
@@ -947,164 +950,73 @@ Instructions:
                   onChange={(e) => updateTextField('editorial_introduction', e.target.value)}
                   style={{
                     width: '100%',
-                    height: '100px',
+                    height: '120px',
                     padding: '15px',
                     border: '1px solid #ccc',
                     borderRadius: '4px',
                     fontSize: '14px',
                     resize: 'vertical'
                   }}
-                  placeholder="Editorial introduction or notes..."
+                  placeholder="Editorial introduction or context..."
                 />
               </div>
 
               {/* Translation Aids */}
-              <div style={{ marginBottom: '30px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                  <label style={{ fontWeight: 'bold' }}>Translation Aids:</label>
-                  <button
-                    onClick={addTranslationAid}
-                    style={{
-                      padding: '8px 16px',
-                      backgroundColor: '#007bff',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Add Translation Aid
-                  </button>
-                </div>
-                
-                {translationAids.map((aid, index) => (
-                  <div key={index} style={{ 
-                    display: 'grid', 
-                    gridTemplateColumns: '100px 200px 1fr 60px', 
-                    gap: '10px', 
-                    alignItems: 'center',
-                    marginBottom: '10px',
-                    padding: '10px',
-                    backgroundColor: '#f8f9fa',
-                    borderRadius: '4px'
-                  }}>
-                    <input
-                      type="text"
-                      placeholder="No."
-                      value={aid.number || ''}
-                      onChange={(e) => updateTranslationAid(index, 'number', e.target.value)}
-                      style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Term"
-                      value={aid.term || ''}
-                      onChange={(e) => updateTranslationAid(index, 'term', e.target.value)}
-                      style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Explanation"
-                      value={aid.explanation || ''}
-                      onChange={(e) => updateTranslationAid(index, 'explanation', e.target.value)}
-                      style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-                    />
-                    <button
-                      onClick={() => removeTranslationAid(index)}
-                      style={{
-                        padding: '8px',
-                        backgroundColor: '#dc3545',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      ×
-                    </button>
+              {translationAids.length > 0 && (
+                <div style={{ marginBottom: '20px' }}>
+                  <h3 style={{ marginBottom: '15px', color: '#333' }}>Translation Aids</h3>
+                  <div style={{ display: 'grid', gap: '10px' }}>
+                    {translationAids.map((aid, index) => (
+                      <div
+                        key={aid.id}
+                        style={{
+                          padding: '15px',
+                          border: '1px solid #ddd',
+                          borderRadius: '8px',
+                          backgroundColor: '#f9f9f9'
+                        }}
+                      >
+                        <div style={{ fontWeight: 'bold', color: '#007bff', marginBottom: '5px' }}>
+                          {aid.number} {aid.term}
+                        </div>
+                        <div style={{ color: '#555' }}>
+                          {aid.explanation}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
+              )}
 
-            {/* Action buttons */}
-            <div style={{ 
-              padding: '20px', 
-              backgroundColor: '#f8f9fa', 
-              borderTop: '1px solid #ddd',
-              display: 'flex',
-              justifyContent: 'center',
-              gap: '15px'
-            }}>
-              <button
-                onClick={() => updateTextStatus('deleted')}
-                style={{
-                  padding: '12px 24px',
-                  backgroundColor: '#dc3545',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold'
-                }}
-              >
-                Delete
-              </button>
-              <button
-                onClick={() => updateTextStatus('parallel_confirmed')}
-                style={{
-                  padding: '12px 24px',
-                  backgroundColor: '#28a745',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold'
-                }}
-              >
-                Parallel Confirmed
-              </button>
-              <button
-                onClick={() => updateTextStatus('german_available')}
-                style={{
-                  padding: '12px 24px',
-                  backgroundColor: '#17a2b8',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold'
-                }}
-              >
-                German Available
-              </button>
-              <button
-                onClick={() => updateTextStatus('halunder_only')}
-                style={{
-                  padding: '12px 24px',
-                  backgroundColor: '#fd7e14',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold'
-                }}
-              >
-                Halunder Only
-              </button>
-            </div>
-          </>
-        ) : (
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center', 
-            height: '100%',
-            color: '#666'
-          }}>
-            Select a text to review
-          </div>
-        )}
+              {/* Move to Bucket Buttons */}
+              <div style={{ marginTop: '30px', padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                <h3 style={{ marginBottom: '15px', color: '#333' }}>Move to Bucket</h3>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {Object.entries(buckets).map(([key, bucket]) => {
+                    if (key === selectedBucket) return null
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => moveTextToBucket(key)}
+                        style={{
+                          padding: '10px 15px',
+                          backgroundColor: bucket.color,
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '14px'
+                        }}
+                      >
+                        Move to {bucket.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   )
