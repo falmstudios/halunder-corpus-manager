@@ -13,6 +13,16 @@ export default function TextReview() {
   const [bucketCounts, setBucketCounts] = useState({})
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   
+  // Bucket management
+  const [customBuckets, setCustomBuckets] = useState({})
+  const [showNewBucketForm, setShowNewBucketForm] = useState(false)
+  const [newBucketName, setNewBucketName] = useState('')
+  const [newBucketColor, setNewBucketColor] = useState('#6c757d')
+  
+  // Drag and drop
+  const [draggedText, setDraggedText] = useState(null)
+  const [dragOverBucket, setDragOverBucket] = useState(null)
+  
   // Sentence processing
   const [showSentenceProcessor, setShowSentenceProcessor] = useState(false)
   const [sentenceProcessing, setSentenceProcessing] = useState(false)
@@ -61,7 +71,7 @@ export default function TextReview() {
   
   const [translationAids, setTranslationAids] = useState([])
 
-  const buckets = {
+  const defaultBuckets = {
     pending: { label: 'Pending Review', color: '#ffc107' },
     parallel_confirmed: { label: 'Parallel Confirmed', color: '#28a745' },
     german_available: { label: 'German Available', color: '#17a2b8' },
@@ -69,7 +79,11 @@ export default function TextReview() {
     deleted: { label: 'Deleted', color: '#dc3545' }
   }
 
+  // Combine default and custom buckets
+  const allBuckets = { ...defaultBuckets, ...customBuckets }
+
   useEffect(() => {
+    loadCustomBuckets()
     loadBucketCounts()
     loadTexts()
     loadProcessedTexts()
@@ -120,6 +134,110 @@ export default function TextReview() {
       setProcessResult(null)
     }
   }, [currentText])
+
+  // Load custom buckets from localStorage
+  const loadCustomBuckets = () => {
+    try {
+      const saved = localStorage.getItem('halunder_custom_buckets')
+      if (saved) {
+        setCustomBuckets(JSON.parse(saved))
+      }
+    } catch (err) {
+      console.error('Failed to load custom buckets:', err)
+    }
+  }
+
+  // Save custom buckets to localStorage
+  const saveCustomBuckets = (buckets) => {
+    try {
+      localStorage.setItem('halunder_custom_buckets', JSON.stringify(buckets))
+      setCustomBuckets(buckets)
+    } catch (err) {
+      console.error('Failed to save custom buckets:', err)
+    }
+  }
+
+  // Create new bucket
+  const createNewBucket = () => {
+    if (!newBucketName.trim()) {
+      setError('Bucket name is required')
+      return
+    }
+    
+    const bucketKey = newBucketName.toLowerCase().replace(/\s+/g, '_')
+    
+    if (allBuckets[bucketKey]) {
+      setError('Bucket name already exists')
+      return
+    }
+    
+    const newBuckets = {
+      ...customBuckets,
+      [bucketKey]: {
+        label: newBucketName.trim(),
+        color: newBucketColor
+      }
+    }
+    
+    saveCustomBuckets(newBuckets)
+    setNewBucketName('')
+    setNewBucketColor('#6c757d')
+    setShowNewBucketForm(false)
+    setError('')
+  }
+
+  // Delete custom bucket
+  const deleteCustomBucket = (bucketKey) => {
+    if (defaultBuckets[bucketKey]) {
+      setError('Cannot delete default buckets')
+      return
+    }
+    
+    if (confirm(`Are you sure you want to delete the "${customBuckets[bucketKey].label}" bucket?`)) {
+      const newBuckets = { ...customBuckets }
+      delete newBuckets[bucketKey]
+      saveCustomBuckets(newBuckets)
+      
+      // Switch to pending bucket if deleting current bucket
+      if (selectedBucket === bucketKey) {
+        setSelectedBucket('pending')
+      }
+    }
+  }
+
+  // Drag and drop handlers
+  const handleDragStart = (e, text) => {
+    setDraggedText(text)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragOver = (e, bucketKey) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverBucket(bucketKey)
+  }
+
+  const handleDragLeave = () => {
+    setDragOverBucket(null)
+  }
+
+  const handleDrop = async (e, bucketKey) => {
+    e.preventDefault()
+    setDragOverBucket(null)
+    
+    if (!draggedText || bucketKey === selectedBucket) {
+      setDraggedText(null)
+      return
+    }
+    
+    try {
+      await moveTextToBucket(bucketKey, draggedText.id)
+      setDraggedText(null)
+    } catch (err) {
+      setError(`Failed to move text: ${err.message}`)
+      setDraggedText(null)
+    }
+  }
 
   const loadBucketCounts = async () => {
     try {
@@ -228,10 +346,11 @@ export default function TextReview() {
     setCurrentText(text)
   }
 
-  const moveTextToBucket = async (bucketName) => {
-    if (!currentText) return
+  const moveTextToBucket = async (bucketName, textId = null) => {
+    const targetTextId = textId || currentText?.id
+    if (!targetTextId) return
     
-    if (hasUnsavedChanges) {
+    if (!textId && hasUnsavedChanges) {
       await saveChanges()
     }
     
@@ -240,7 +359,7 @@ export default function TextReview() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: currentText.id,
+          id: targetTextId,
           status: bucketName
         })
       })
@@ -255,6 +374,7 @@ export default function TextReview() {
       
     } catch (err) {
       setError(err.message)
+      throw err
     }
   }
 
@@ -452,27 +572,168 @@ Please provide your response as JSON in this exact format:
 
         {/* Bucket Selection */}
         <div style={{ padding: '15px', borderBottom: '1px solid #ddd' }}>
-          <h3 style={{ margin: '0 0 10px 0', fontSize: '16px' }}>Buckets</h3>
-          {Object.entries(buckets).map(([key, bucket]) => (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <h3 style={{ margin: 0, fontSize: '16px' }}>Buckets</h3>
             <button
-              key={key}
-              onClick={() => setSelectedBucket(key)}
+              onClick={() => setShowNewBucketForm(!showNewBucketForm)}
               style={{
-                display: 'block',
-                width: '100%',
-                padding: '8px 12px',
-                margin: '4px 0',
+                padding: '4px 8px',
+                backgroundColor: '#007bff',
+                color: 'white',
                 border: 'none',
                 borderRadius: '4px',
-                backgroundColor: selectedBucket === key ? bucket.color : '#e9ecef',
-                color: selectedBucket === key ? 'white' : '#333',
                 cursor: 'pointer',
-                fontSize: '14px',
-                textAlign: 'left'
+                fontSize: '12px'
               }}
             >
-              {bucket.label} ({bucketCounts[key] || 0})
+              + New
             </button>
+          </div>
+          
+          {/* New Bucket Form */}
+          {showNewBucketForm && (
+            <div style={{ 
+              padding: '10px', 
+              backgroundColor: '#fff', 
+              border: '1px solid #ddd', 
+              borderRadius: '4px', 
+              marginBottom: '10px' 
+            }}>
+              <input
+                type="text"
+                placeholder="Bucket name"
+                value={newBucketName}
+                onChange={(e) => setNewBucketName(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '6px',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                  marginBottom: '8px'
+                }}
+              />
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                <input
+                  type="color"
+                  value={newBucketColor}
+                  onChange={(e) => setNewBucketColor(e.target.value)}
+                  style={{ width: '30px', height: '24px', border: 'none', borderRadius: '4px' }}
+                />
+                <input
+                  type="text"
+                  value={newBucketColor}
+                  onChange={(e) => setNewBucketColor(e.target.value)}
+                  style={{
+                    flex: 1,
+                    padding: '4px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                    fontSize: '11px'
+                  }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  onClick={createNewBucket}
+                  style={{
+                    flex: 1,
+                    padding: '6px',
+                    backgroundColor: '#28a745',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '11px'
+                  }}
+                >
+                  Create
+                </button>
+                <button
+                  onClick={() => {
+                    setShowNewBucketForm(false)
+                    setNewBucketName('')
+                    setNewBucketColor('#6c757d')
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '6px',
+                    backgroundColor: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '11px'
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {/* Bucket List */}
+          {Object.entries(allBuckets).map(([key, bucket]) => (
+            <div
+              key={key}
+              onDragOver={(e) => handleDragOver(e, key)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, key)}
+              style={{
+                position: 'relative',
+                margin: '4px 0',
+                borderRadius: '4px',
+                border: dragOverBucket === key ? '2px dashed #007bff' : '2px solid transparent'
+              }}
+            >
+              <button
+                onClick={() => setSelectedBucket(key)}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  backgroundColor: selectedBucket === key ? bucket.color : '#e9ecef',
+                  color: selectedBucket === key ? 'white' : '#333',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  textAlign: 'left'
+                }}
+              >
+                {bucket.label} ({bucketCounts[key] || 0})
+              </button>
+              
+              {/* Delete button for custom buckets */}
+              {customBuckets[key] && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    deleteCustomBucket(key)
+                  }}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    width: '16px',
+                    height: '16px',
+                    backgroundColor: '#dc3545',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '50%',
+                    cursor: 'pointer',
+                    fontSize: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  title="Delete bucket"
+                >
+                  ×
+                </button>
+              )}
+            </div>
           ))}
         </div>
 
@@ -517,6 +778,8 @@ Please provide your response as JSON in this exact format:
             texts.map(text => (
               <div
                 key={text.id}
+                draggable
+                onDragStart={(e) => handleDragStart(e, text)}
                 onClick={() => selectText(text)}
                 style={{
                   padding: '10px',
@@ -525,10 +788,12 @@ Please provide your response as JSON in this exact format:
                                  processedTextIds.has(text.id) ? '#e8f5e9' : 'white',
                   border: '1px solid #ddd',
                   borderRadius: '4px',
-                  cursor: 'pointer',
+                  cursor: 'grab',
                   fontSize: '12px',
                   position: 'relative'
                 }}
+                onMouseDown={(e) => e.currentTarget.style.cursor = 'grabbing'}
+                onMouseUp={(e) => e.currentTarget.style.cursor = 'grab'}
               >
                 {/* Green dot indicator for processed texts */}
                 {processedTextIds.has(text.id) && (
@@ -543,14 +808,28 @@ Please provide your response as JSON in this exact format:
                   }} />
                 )}
                 
-                <div style={{ fontWeight: 'bold' }}>
-                  {text.title || 'Untitled'}
+                {/* Drag handle */}
+                <div style={{
+                  position: 'absolute',
+                  left: '4px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: '#ccc',
+                  fontSize: '10px'
+                }}>
+                  ⋮⋮
                 </div>
-                {text.author && (
-                  <div style={{ color: '#666' }}>by {text.author}</div>
-                )}
-                <div style={{ color: '#999', fontSize: '11px' }}>
-                  {text.documents?.publication} ({text.documents?.year})
+                
+                <div style={{ marginLeft: '15px' }}>
+                  <div style={{ fontWeight: 'bold' }}>
+                    {text.title || 'Untitled'}
+                  </div>
+                  {text.author && (
+                    <div style={{ color: '#666' }}>by {text.author}</div>
+                  )}
+                  <div style={{ color: '#999', fontSize: '11px' }}>
+                    {text.documents?.publication} ({text.documents?.year})
+                  </div>
                 </div>
               </div>
             ))
@@ -558,7 +837,7 @@ Please provide your response as JSON in this exact format:
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* Main Content - Rest remains the same */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         
         {/* Top Bar with Actions */}
@@ -819,13 +1098,16 @@ Please provide your response as JSON in this exact format:
           </div>
         )}
 
-        {/* Main editing area */}
+        {/* Main editing area - continues with all the existing form fields... */}
         <div style={{ flex: 1, padding: '20px', overflow: 'auto' }}>
           
           {!currentText ? (
             <div style={{ textAlign: 'center', padding: '50px', color: '#666' }}>
               <h3>Select a text to review</h3>
               <p>Choose a text from the sidebar to start reviewing.</p>
+              <p style={{ fontSize: '12px', marginTop: '20px' }}>
+                💡 <strong>Tip:</strong> Drag texts between buckets to organize them quickly!
+              </p>
             </div>
           ) : (
             <>
@@ -1035,7 +1317,7 @@ Please provide your response as JSON in this exact format:
               <div style={{ marginTop: '30px', padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
                 <h3 style={{ marginBottom: '15px', color: '#333' }}>Move to Bucket</h3>
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                  {Object.entries(buckets).map(([key, bucket]) => {
+                  {Object.entries(allBuckets).map(([key, bucket]) => {
                     if (key === selectedBucket) return null
                     return (
                       <button
