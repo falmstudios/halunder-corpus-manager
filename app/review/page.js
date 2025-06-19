@@ -164,6 +164,11 @@ export default function TextReview() {
     setError('')
     
     try {
+      console.log('Saving text changes...', {
+        textId: currentText.id,
+        hasChanges: hasUnsavedChanges
+      })
+      
       const response = await fetch('/api/save-text', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -175,10 +180,14 @@ export default function TextReview() {
         })
       })
       
+      const result = await response.json()
+      
       if (!response.ok) {
-        const result = await response.json()
+        console.error('Save failed:', result)
         throw new Error(result.error || 'Failed to save')
       }
+      
+      console.log('Save successful')
       
       // Update current text
       setCurrentText(prev => ({
@@ -193,7 +202,9 @@ export default function TextReview() {
       setHasUnsavedChanges(false)
       
     } catch (err) {
+      console.error('Save error:', err)
       setError(err.message)
+      throw err // Re-throw so auto-save can handle it
     } finally {
       setSaving(false)
     }
@@ -204,7 +215,15 @@ export default function TextReview() {
     
     // Auto-save before moving if there are unsaved changes
     if (hasUnsavedChanges) {
-      await saveCurrentText()
+      console.log('Auto-saving before status change...')
+      try {
+        await saveCurrentText()
+        console.log('Auto-save completed')
+      } catch (saveError) {
+        console.error('Auto-save failed:', saveError)
+        setError('Failed to save changes before moving to bucket. Please save manually first.')
+        return
+      }
     }
     
     // Only confirm for delete
@@ -215,6 +234,7 @@ export default function TextReview() {
     }
     
     try {
+      console.log('Updating status to:', status)
       const response = await fetch('/api/update-text-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -229,10 +249,13 @@ export default function TextReview() {
         throw new Error(result.error || 'Failed to update status')
       }
       
+      console.log('Status updated successfully')
+      
       // Reload texts and counts immediately
       await Promise.all([loadTexts(), loadBucketCounts()])
       
     } catch (err) {
+      console.error('Status update error:', err)
       setError(err.message)
     }
   }
@@ -606,6 +629,55 @@ Instructions:
                       <option value="scholarly">Scholarly</option>
                       <option value="literary">Literary</option>
                     </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>German Translation Location:</label>
+                    <select
+                      value={textFields.german_translation_location}
+                      onChange={(e) => updateTextField('german_translation_location', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    >
+                      <option value="">Select...</option>
+                      <option value="Side-by-side with Helgolandic">Side-by-side with Helgolandic</option>
+                      <option value="Following the Helgolandic text">Following the Helgolandic text</option>
+                      <option value="On a different page">On a different page</option>
+                      <option value="In a separate publication">In a separate publication</option>
+                      <option value="Not present on this page">Not present on this page</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Original Source Reference */}
+              <div style={{ marginBottom: '30px' }}>
+                <h3 style={{ marginBottom: '15px', color: '#333' }}>Original Source Reference</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '15px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Original Title:</label>
+                    <input
+                      type="text"
+                      value={textFields.original_source_title}
+                      onChange={(e) => updateTextField('original_source_title', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Original Author:</label>
+                    <input
+                      type="text"
+                      value={textFields.original_source_author}
+                      onChange={(e) => updateTextField('original_source_author', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Publication Info:</label>
+                    <input
+                      type="text"
+                      value={textFields.original_source_publication_info}
+                      onChange={(e) => updateTextField('original_source_publication_info', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
                   </div>
                 </div>
               </div>
