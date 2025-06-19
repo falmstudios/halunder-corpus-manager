@@ -236,12 +236,12 @@ export default function TextReview() {
     }
     
     try {
-      const response = await fetch('/api/move-text', {
+      const response = await fetch('/api/update-text-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          textId: currentText.id,
-          bucket: bucketName
+          id: currentText.id,
+          status: bucketName
         })
       })
 
@@ -265,13 +265,14 @@ export default function TextReview() {
     setError('')
     
     try {
-      const response = await fetch('/api/update-text', {
+      const response = await fetch('/api/save-text', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          textId: currentText.id,
-          textFields,
-          documentFields
+          id: currentText.id,
+          ...textFields,
+          translation_aids: translationAids,
+          document_metadata: documentFields
         })
       })
 
