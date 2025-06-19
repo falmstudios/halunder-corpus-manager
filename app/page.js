@@ -105,18 +105,6 @@ export default function Home() {
             Text Review
           </a>
           <a 
-            href="/sentences" 
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#fd7e14',
-              color: 'white',
-              textDecoration: 'none',
-              borderRadius: '4px'
-            }}
-          >
-            Sentence Processor
-          </a>
-          <a 
             href="/corpus" 
             style={{
               padding: '10px 20px',
@@ -277,9 +265,9 @@ export default function Home() {
           </div>
 
           <div style={{ padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-            <h3 style={{ color: '#6f42c1', margin: '0 0 10px 0' }}>3. Process Sentences</h3>
+            <h3 style={{ color: '#6f42c1', margin: '0 0 10px 0' }}>3. Process & View Sentences</h3>
             <p style={{ margin: '0 0 10px 0', fontSize: '14px' }}>
-              Generate parallel sentence pairs using AI, then view the processed corpus data for training and analysis.
+              Generate parallel sentence pairs using AI in the Text Review interface, then view processed corpus data.
             </p>
             <div style={{ fontSize: '12px', color: '#666' }}>
               🤖 AI-powered sentence alignment<br/>
@@ -307,8 +295,9 @@ export default function Home() {
             <li>Start by uploading your JSON files</li>
             <li>Review and mark texts as "Parallel Confirmed" in Text Review</li>
             <li>Use the "Copy JSON Prompt" button to get AI sentence processing</li>
-            <li>Paste AI response into the sentence processor</li>
-            <li>View results in the Corpus Viewer</li>
+            <li>Paste AI response into the sentence processor within Text Review</li>
+            <li>View and edit processed sentences directly in Text Review</li>
+            <li>Use Corpus Viewer for overview of all processed data</li>
           </ol>
         </div>
       </div>
