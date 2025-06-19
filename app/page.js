@@ -104,6 +104,30 @@ export default function Home() {
           >
             Text Review
           </a>
+          <a 
+            href="/sentences" 
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#fd7e14',
+              color: 'white',
+              textDecoration: 'none',
+              borderRadius: '4px'
+            }}
+          >
+            Sentence Processor
+          </a>
+          <a 
+            href="/corpus" 
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#6f42c1',
+              color: 'white',
+              textDecoration: 'none',
+              borderRadius: '4px'
+            }}
+          >
+            Corpus Viewer
+          </a>
         </div>
       </div>
 
@@ -221,6 +245,72 @@ export default function Home() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Quick Start Guide */}
+      <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', border: '1px solid #ddd' }}>
+        <h2>Quick Start Guide</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginTop: '20px' }}>
+          
+          <div style={{ padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+            <h3 style={{ color: '#007bff', margin: '0 0 10px 0' }}>1. Upload Data</h3>
+            <p style={{ margin: '0 0 10px 0', fontSize: '14px' }}>
+              Upload your Halunder JSON files using the form above. The system will automatically process and categorize your texts.
+            </p>
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              📁 Supports multiple JSON files<br/>
+              📊 Real-time progress tracking<br/>
+              🔄 Automatic duplicate handling
+            </div>
+          </div>
+
+          <div style={{ padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+            <h3 style={{ color: '#17a2b8', margin: '0 0 10px 0' }}>2. Review Texts</h3>
+            <p style={{ margin: '0 0 10px 0', fontSize: '14px' }}>
+              Use the Text Review interface to manually review, edit, and categorize your texts into buckets for processing.
+            </p>
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              ✏️ Edit metadata and content<br/>
+              📂 Sort into processing buckets<br/>
+              💾 Auto-save functionality
+            </div>
+          </div>
+
+          <div style={{ padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+            <h3 style={{ color: '#6f42c1', margin: '0 0 10px 0' }}>3. Process Sentences</h3>
+            <p style={{ margin: '0 0 10px 0', fontSize: '14px' }}>
+              Generate parallel sentence pairs using AI, then view the processed corpus data for training and analysis.
+            </p>
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              🤖 AI-powered sentence alignment<br/>
+              📝 Linguistic feature extraction<br/>
+              📈 Vocabulary tracking
+            </div>
+          </div>
+
+          <div style={{ padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+            <h3 style={{ color: '#28a745', margin: '0 0 10px 0' }}>4. Manage Data</h3>
+            <p style={{ margin: '0 0 10px 0', fontSize: '14px' }}>
+              Use the Table Editor for advanced data management, filtering, and bulk operations across all database tables.
+            </p>
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              🔍 Advanced filtering options<br/>
+              📋 Bulk edit capabilities<br/>
+              🗃️ Full database access
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#fff3cd', borderRadius: '8px', border: '1px solid #ffeaa7' }}>
+          <h4 style={{ color: '#856404', margin: '0 0 10px 0' }}>💡 Workflow Tips</h4>
+          <ol style={{ margin: 0, paddingLeft: '20px', color: '#856404' }}>
+            <li>Start by uploading your JSON files</li>
+            <li>Review and mark texts as "Parallel Confirmed" in Text Review</li>
+            <li>Use the "Copy JSON Prompt" button to get AI sentence processing</li>
+            <li>Paste AI response into the sentence processor</li>
+            <li>View results in the Corpus Viewer</li>
+          </ol>
+        </div>
       </div>
     </div>
   )
