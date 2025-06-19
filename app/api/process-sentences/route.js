@@ -28,6 +28,17 @@ export async function POST(request) {
     console.log('Processing data for textId:', textId)
     console.log('Parsed data keys:', Object.keys(parsedData))
 
+    // Test database connection first
+    const { data: testQuery, error: testError } = await supabase
+      .from('parallel_corpus')
+      .select('count')
+      .limit(1)
+
+    if (testError) {
+      console.error('Database connection test failed:', testError)
+      return Response.json({ error: 'Database connection failed: ' + testError.message }, { status: 500 })
+    }
+
     const processed = {
       parallelSentences: 0,
       monolingualSentences: 0,
@@ -53,18 +64,25 @@ export async function POST(request) {
 
       if (parallelData.length > 0) {
         console.log('Inserting', parallelData.length, 'parallel sentences')
+        console.log('Sample data:', JSON.stringify(parallelData[0], null, 2))
         
-        const { error: parallelError } = await supabase
+        const { data: insertedData, error: parallelError } = await supabase
           .from('parallel_corpus')
           .insert(parallelData)
+          .select()
 
         if (parallelError) {
-          console.error('Parallel corpus error:', parallelError)
-          throw new Error(`Failed to save parallel sentences: ${parallelError.message}`)
+          console.error('Parallel corpus error details:', {
+            message: parallelError.message,
+            details: parallelError.details,
+            hint: parallelError.hint,
+            code: parallelError.code
+          })
+          throw new Error(`Failed to save parallel sentences: ${parallelError.message || parallelError.code || 'Unknown error'}`)
         }
 
         processed.parallelSentences = parallelData.length
-        console.log('Successfully inserted parallel sentences')
+        console.log('Successfully inserted', insertedData?.length || parallelData.length, 'parallel sentences')
       }
     }
 
@@ -95,7 +113,7 @@ export async function POST(request) {
 
         if (monoError) {
           console.error('Monolingual corpus error:', monoError)
-          throw new Error(`Failed to save monolingual sentences: ${monoError.message}`)
+          throw new Error(`Failed to save monolingual sentences: ${monoError.message || monoError.code || 'Unknown error'}`)
         }
 
         processed.monolingualSentences = monolingualData.length
@@ -126,7 +144,7 @@ export async function POST(request) {
 
         if (featuresError) {
           console.error('Linguistic features error:', featuresError)
-          throw new Error(`Failed to save linguistic features: ${featuresError.message}`)
+          throw new Error(`Failed to save linguistic features: ${featuresError.message || featuresError.code || 'Unknown error'}`)
         }
 
         processed.linguisticFeatures = featuresData.length
@@ -158,9 +176,32 @@ async function clearExistingData(textId) {
     console.log('Clearing existing data for textId:', textId)
     
     // Delete existing records for this text
-    await supabase.from('parallel_corpus').delete().eq('source_text_id', textId)
-    await supabase.from('monolingual_corpus').delete().eq('source_text_id', textId)
-    await supabase.from('linguistic_features').delete().eq('source_text_id', textId)
+    const { error: parallelDeleteError } = await supabase
+      .from('parallel_corpus')
+      .delete()
+      .eq('source_text_id', textId)
+    
+    if (parallelDeleteError) {
+      console.log('Parallel delete error (may be normal if no existing data):', parallelDeleteError.message)
+    }
+
+    const { error: monoDeleteError } = await supabase
+      .from('monolingual_corpus')
+      .delete()
+      .eq('source_text_id', textId)
+    
+    if (monoDeleteError) {
+      console.log('Monolingual delete error (may be normal if no existing data):', monoDeleteError.message)
+    }
+
+    const { error: featuresDeleteError } = await supabase
+      .from('linguistic_features')
+      .delete()
+      .eq('source_text_id', textId)
+    
+    if (featuresDeleteError) {
+      console.log('Features delete error (may be normal if no existing data):', featuresDeleteError.message)
+    }
     
     console.log('Existing data cleared')
   } catch (error) {
@@ -176,11 +217,16 @@ async function updateVocabularyTracker(halunderWord, germanTranslation) {
     const word = halunderWord.trim().toLowerCase()
     
     // Check if word exists
-    const { data: existing } = await supabase
+    const { data: existing, error: selectError } = await supabase
       .from('vocabulary_tracker')
       .select('*')
       .eq('halunder_word', word)
       .single()
+
+    if (selectError && selectError.code !== 'PGRST116') { // PGRST116 means no rows found
+      console.error('Vocabulary select error:', selectError)
+      return
+    }
 
     if (existing) {
       // Update frequency and add German translation if new
@@ -189,7 +235,7 @@ async function updateVocabularyTracker(halunderWord, germanTranslation) {
         translations.push(germanTranslation)
       }
 
-      await supabase
+      const { error: updateError } = await supabase
         .from('vocabulary_tracker')
         .update({
           frequency_count: existing.frequency_count + 1,
@@ -197,15 +243,23 @@ async function updateVocabularyTracker(halunderWord, germanTranslation) {
           last_seen_at: new Date().toISOString()
         })
         .eq('halunder_word', word)
+
+      if (updateError) {
+        console.error('Vocabulary update error:', updateError)
+      }
     } else {
       // Create new entry
-      await supabase
+      const { error: insertError } = await supabase
         .from('vocabulary_tracker')
         .insert({
           halunder_word: word,
           german_translations: germanTranslation ? [germanTranslation] : [],
           frequency_count: 1
         })
+
+      if (insertError) {
+        console.error('Vocabulary insert error:', insertError)
+      }
     }
   } catch (error) {
     console.error('Vocabulary tracker error:', error)
