@@ -37,17 +37,13 @@ export async function GET(request) {
       query = query.eq('review_status', bucket)
     }
     
-    query = query.order('created_at', { ascending: true })
-    
-    // Apply search filter
+    // Apply search filter with proper format
     if (search.trim()) {
-      query = query.or(`
-        title.ilike.%${search}%,
-        author.ilike.%${search}%,
-        complete_helgolandic_text.ilike.%${search}%,
-        german_translation_text.ilike.%${search}%
-      `)
+      const searchTerm = search.trim()
+      query = query.or(`title.ilike.%${searchTerm}%,author.ilike.%${searchTerm}%,complete_helgolandic_text.ilike.%${searchTerm}%,german_translation_text.ilike.%${searchTerm}%`)
     }
+    
+    query = query.order('created_at', { ascending: true })
     
     const { data, error } = await query
     
