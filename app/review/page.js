@@ -12,6 +12,7 @@ export default function TextReview() {
   const [searchTerm, setSearchTerm] = useState('')
   const [bucketCounts, setBucketCounts] = useState({})
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [refreshingCounts, setRefreshingCounts] = useState(false)
   
   // Bucket management
   const [customBuckets, setCustomBuckets] = useState({})
@@ -84,10 +85,28 @@ export default function TextReview() {
 
   useEffect(() => {
     loadCustomBuckets()
-    loadBucketCounts()
     loadTexts()
     loadProcessedTexts()
   }, [selectedBucket])
+
+  // Refresh bucket counts when custom buckets change
+  useEffect(() => {
+    loadBucketCounts()
+  }, [customBuckets])
+
+  // Always refresh counts when switching buckets
+  useEffect(() => {
+    loadBucketCounts()
+  }, [selectedBucket])
+
+  // Set up periodic refresh of bucket counts every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadBucketCounts()
+    }, 30000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     if (currentText) {
@@ -179,7 +198,12 @@ export default function TextReview() {
         throw new Error(result.error || 'Failed to create bucket')
       }
       
-      await loadCustomBuckets()
+      // Refresh both custom buckets and counts
+      await Promise.all([
+        loadCustomBuckets(),
+        loadBucketCounts()
+      ])
+      
       setNewBucketName('')
       setNewBucketColor('#6c757d')
       setShowNewBucketForm(false)
@@ -208,7 +232,11 @@ export default function TextReview() {
           throw new Error(result.error || 'Failed to delete bucket')
         }
         
-        await loadCustomBuckets()
+        // Refresh both custom buckets and counts
+        await Promise.all([
+          loadCustomBuckets(),
+          loadBucketCounts()
+        ])
         
         // Switch to pending bucket if deleting current bucket
         if (selectedBucket === bucketKey) {
@@ -256,15 +284,21 @@ export default function TextReview() {
   }
 
   const loadBucketCounts = async () => {
+    setRefreshingCounts(true)
     try {
       const response = await fetch('/api/bucket-counts')
       const result = await response.json()
       
       if (response.ok) {
         setBucketCounts(result.counts)
+        console.log('Bucket counts updated:', result.counts)
+      } else {
+        console.error('Failed to load bucket counts:', result.error)
       }
     } catch (err) {
       console.error('Failed to load bucket counts:', err)
+    } finally {
+      setRefreshingCounts(false)
     }
   }
 
@@ -385,8 +419,11 @@ export default function TextReview() {
         throw new Error(result.error || 'Failed to move text')
       }
 
-      await loadBucketCounts()
-      await loadTexts()
+      // Immediately refresh bucket counts and texts
+      await Promise.all([
+        loadBucketCounts(),
+        loadTexts()
+      ])
       
     } catch (err) {
       setError(err.message)
@@ -557,8 +594,11 @@ Please provide your response as JSON in this exact format:
       setShowSentenceProcessor(false)
       
       // Reload processed sentences and update processed texts list
-      loadProcessedSentences(currentText.id)
-      loadProcessedTexts()
+      await Promise.all([
+        loadProcessedSentences(currentText.id),
+        loadProcessedTexts(),
+        loadBucketCounts()
+      ])
 
     } catch (err) {
       setError(err.message)
@@ -723,10 +763,11 @@ Please provide your response as JSON in this exact format:
                   color: selectedBucket === key ? 'white' : '#333',
                   cursor: 'pointer',
                   fontSize: '14px',
-                  textAlign: 'left'
+                  textAlign: 'left',
+                  opacity: refreshingCounts ? 0.7 : 1
                 }}
               >
-                {bucket.label} ({bucketCounts[key] || 0})
+                {bucket.label} ({refreshingCounts ? '...' : (bucketCounts[key] || 0)})
               </button>
               
               {/* Delete button for custom buckets */}
