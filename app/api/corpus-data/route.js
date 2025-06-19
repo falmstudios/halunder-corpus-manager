@@ -7,37 +7,57 @@ const supabase = createClient(
 
 export async function GET(request) {
   try {
-    // Get texts that have processed corpus data
-    const { data, error } = await supabase
-      .from('texts')
-      .select(`
-        id,
-        title,
-        author,
-        review_status,
-        parallel_corpus!inner(id)
-      `)
-      .order('updated_at', { ascending: false })
+    const { searchParams } = new URL(request.url)
+    const textId = searchParams.get('textId')
+    const type = searchParams.get('type')
+
+    if (!type) {
+      return Response.json({ error: 'Type parameter is required' }, { status: 400 })
+    }
+
+    let data, error
+
+    switch (type) {
+      case 'parallel':
+        if (!textId) {
+          return Response.json({ error: 'TextId required for parallel sentences' }, { status: 400 })
+        }
+        ({ data, error } = await supabase
+          .from('parallel_corpus')
+          .select('*')
+          .eq('source_text_id', textId)
+          .order('sentence_order', { ascending: true }))
+        break
+
+      case 'features':
+        if (!textId) {
+          return Response.json({ error: 'TextId required for features' }, { status: 400 })
+        }
+        ({ data, error } = await supabase
+          .from('linguistic_features')
+          .select('*')
+          .eq('source_text_id', textId)
+          .order('created_at', { ascending: true }))
+        break
+
+      case 'vocabulary':
+        ({ data, error } = await supabase
+          .from('vocabulary_tracker')
+          .select('*')
+          .order('frequency_count', { ascending: false })
+          .limit(100))
+        break
+
+      default:
+        return Response.json({ error: 'Invalid type parameter' }, { status: 400 })
+    }
 
     if (error) {
       console.error('Database error:', error)
       return Response.json({ error: error.message }, { status: 500 })
     }
 
-    // Remove duplicates and flatten
-    const uniqueTexts = data.reduce((acc, text) => {
-      if (!acc.find(t => t.id === text.id)) {
-        acc.push({
-          id: text.id,
-          title: text.title,
-          author: text.author,
-          review_status: text.review_status
-        })
-      }
-      return acc
-    }, [])
-
-    return Response.json({ texts: uniqueTexts })
+    return Response.json({ data: data || [] })
 
   } catch (error) {
     console.error('API error:', error)
