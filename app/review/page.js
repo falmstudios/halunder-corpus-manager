@@ -25,6 +25,9 @@ export default function TextReview() {
   const [linguisticFeatures, setLinguisticFeatures] = useState([])
   const [sentencesLoading, setSentencesLoading] = useState(false)
   
+  // Track which texts have processed sentences
+  const [processedTextIds, setProcessedTextIds] = useState(new Set())
+  
   // Editable text fields
   const [textFields, setTextFields] = useState({
     title: '',
@@ -69,6 +72,7 @@ export default function TextReview() {
   useEffect(() => {
     loadBucketCounts()
     loadTexts()
+    loadProcessedTexts()
   }, [selectedBucket])
 
   useEffect(() => {
@@ -127,6 +131,20 @@ export default function TextReview() {
       }
     } catch (err) {
       console.error('Failed to load bucket counts:', err)
+    }
+  }
+
+  const loadProcessedTexts = async () => {
+    try {
+      const response = await fetch('/api/corpus-texts')
+      const result = await response.json()
+      
+      if (response.ok) {
+        const processedIds = new Set(result.texts.map(text => text.id))
+        setProcessedTextIds(processedIds)
+      }
+    } catch (err) {
+      console.error('Failed to load processed texts:', err)
     }
   }
 
@@ -281,25 +299,41 @@ export default function TextReview() {
 
     const prompt = `Please analyze this Halunder text and create parallel sentence pairs. Extract all sentence pairs between Halunder and German, identify additional Halunder-only sentences, and note linguistic features like idioms, cultural terms, and etymological information.
 
-**Text Information:**
-Title: ${textFields.title || 'N/A'}
-Author: ${textFields.author || 'N/A'}
-Translator: ${textFields.translator || 'N/A'}
-Source: ${documentFields.publication || 'N/A'} (${documentFields.year || 'N/A'})
+Text Information: Title: ${textFields.title || 'N/A'} Author: ${textFields.author || 'N/A'} Translator: ${textFields.translator || 'N/A'} Source: ${documentFields.publication || 'N/A'} (${documentFields.year || 'N/A'})
 
-**Halunder Text:**
-${textFields.complete_helgolandic_text}
+Halunder Text: ${textFields.complete_helgolandic_text}
 
-**German Translation:**
-${textFields.german_translation_text}
+German Translation: ${textFields.german_translation_text}
 
-**Editorial Introduction:**
-${textFields.editorial_introduction || 'N/A'}
+Editorial Introduction: ${textFields.editorial_introduction || 'N/A'}
 
-**Translation Aids:**
-${translationAidsText || 'N/A'}
+Translation Aids: ${translationAidsText || 'N/A'}
 
-**Please provide your response as JSON in this exact format:**
+Instructions:
+
+Align sentences as accurately as possible based on semantic content, not just word order
+
+Include ALL Halunder sentences, even if they don't have direct German parallels
+
+Process ALL sections of the text (titles, editorial notes, translation aids, main text)
+
+Correct 100% obvious OCR errors
+
+Mark any untranslatable or culturally specific terms with detailed explanations
+
+Include etymology or cultural context where relevant (especially for unique Halunder developments)
+
+Identify idiomatic expressions and provide both literal and figurative meanings
+
+If persons or places are mentioned and additional information about them exists, add them to the linguistic features.
+
+Include pedagogical notes that would help language learners (common confusions, false friends, pronunciation guides)
+
+If multiple translation interpretations exist as indicated by the text, provide separate entries for each alternative
+
+Type categories: idiom, phrase, cultural, etymology, grammar, other
+
+Please provide your response as JSON in this exact format:
 
 \`\`\`json
 {
@@ -324,20 +358,12 @@ ${translationAidsText || 'N/A'}
     {
       "halunder_term": "specific word or phrase",
       "german_equivalent": "German translation",
-      "explanation": "Detailed explanation including etymology/cultural context",
+      "explanation": "Detailed explanation including etymology/cultural context/pedagogical notes",
       "type": "idiom"
     }
   ]
 }
-\`\`\`
-
-Instructions:
-- Align sentences as accurately as possible
-- Include ALL Halunder sentences, even if they don't have direct German parallels
-- Mark any untranslatable or culturally specific terms
-- Include etymology or cultural context where relevant
-- Identify idiomatic expressions and their meanings
-- Type can be: idiom, phrase, cultural, etymology, grammar, other`
+\`\`\``
 
     try {
       navigator.clipboard.writeText(prompt)
@@ -384,8 +410,9 @@ Instructions:
       setJsonInput('')
       setShowSentenceProcessor(false)
       
-      // Reload processed sentences
+      // Reload processed sentences and update processed texts list
       loadProcessedSentences(currentText.id)
+      loadProcessedTexts()
 
     } catch (err) {
       setError(err.message)
@@ -493,13 +520,28 @@ Instructions:
                 style={{
                   padding: '10px',
                   margin: '5px 0',
-                  backgroundColor: currentText?.id === text.id ? '#e3f2fd' : 'white',
+                  backgroundColor: currentText?.id === text.id ? '#e3f2fd' : 
+                                 processedTextIds.has(text.id) ? '#e8f5e9' : 'white',
                   border: '1px solid #ddd',
                   borderRadius: '4px',
                   cursor: 'pointer',
-                  fontSize: '12px'
+                  fontSize: '12px',
+                  position: 'relative'
                 }}
               >
+                {/* Green dot indicator for processed texts */}
+                {processedTextIds.has(text.id) && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '8px',
+                    right: '8px',
+                    width: '8px',
+                    height: '8px',
+                    backgroundColor: '#28a745',
+                    borderRadius: '50%'
+                  }} />
+                )}
+                
                 <div style={{ fontWeight: 'bold' }}>
                   {text.title || 'Untitled'}
                 </div>
