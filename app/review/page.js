@@ -512,28 +512,19 @@ export default function TextReview() {
 - Align based on semantic meaning, not line-by-line
 - Each sentence pair should represent one complete thought/statement
 - For poetry: if multiple lines form one sentence, combine them with spaces
-- EVERY German sentence should have a corresponding Halunder sentence - do not leave any untranslated
-- If German text is incomplete, match it with the best corresponding Halunder segment
 
-**CRITICAL JSON FORMAT RULES:**
-- Use ONLY straight double quotes (") - never curly quotes (" ")
-- Ensure valid JSON syntax
-- Test your JSON before responding
+**URGENT: PROCESS THE ENTIRE TEXT - DO NOT SKIP ANY CONTENT. Work from the very first word to the very last word. Every sentence must be included in your output.**
 
-**Example of proper alignment:**
-If Halunder shows multiple lines:
+**Example:**
+If Halunder text shows:
 "Äpp bae Willem - ammen (?) tau! -
-Willem Teil
-Min ick no nons fann verhaale well"
+Willem Teil"
 
 And German shows:
 "Hinauf zu Wilhelm um zwei Grogs.
-Wilhelm Teil
-Mir ist noch nicht nach erzählen."
+Wilhelm Teil"
 
-Create sentence pairs based on meaning:
-1. "Äpp bae Willem - ammen (?) tau! - Willem Teil" → "Hinauf zu Wilhelm um zwei Grogs. Wilhelm Teil"
-2. "Min ick no nons fann verhaale well" → "Mir ist noch nicht nach erzählen."
+Create ONE sentence pair: "Äpp bae Willem - ammen (?) tau! - Willem Teil" → "Hinauf zu Wilhelm um zwei Grogs. Wilhelm Teil"
 
 **Text Information:**
 Title: ${textFields.title || 'N/A'}
@@ -556,19 +547,16 @@ ${translationAidsText || 'N/A'}
 **INSTRUCTIONS:**
 
 **For Sentence Alignment:**
-- Look at BOTH texts completely and match every segment
 - Combine lines that form complete sentences - do NOT split at line breaks
 - Look for actual sentence punctuation (. ! ?) to determine sentence boundaries
 - For poetry: "Line 1 text\\nLine 2 continuation." = ONE sentence pair
 - Match complete semantic units, not individual lines
 - Join multiple lines with single spaces when they form one sentence
-- ENSURE every German segment has a Halunder match and vice versa
-- If segments don't align perfectly, group them logically by meaning
+- **MANDATORY: Process every single line of text - start to finish, no skipping**
 
 **For Linguistic Features:**
-- Extract ALL unique Halunder words and phrases that need explanation
+- Extract linguistic features from throughout the entire text
 - Focus on cultural terms, etymology, idioms, and grammatical features
-- Provide detailed German explanations suitable for language learners
 
 **Output Format (USE STRAIGHT QUOTES ONLY):**
 {
@@ -593,7 +581,7 @@ ${translationAidsText || 'N/A'}
   ]
 }
 
-**REMINDER: Use only straight double quotes (") in your JSON response, never curly quotes (" "). Ensure every German text segment is matched with corresponding Halunder text if available in the fields.**`
+**REMINDER: Use only straight double quotes (") in your JSON response, never curly quotes (" "). PROCESS THE COMPLETE TEXT FROM BEGINNING TO END.**`
 
   try {
     navigator.clipboard.writeText(prompt)
