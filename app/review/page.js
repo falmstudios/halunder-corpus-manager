@@ -506,7 +506,7 @@ export default function TextReview() {
 
   // Clean quotation marks in the texts before including them
   const cleanHalunderText = textFields.complete_helgolandic_text
-    .replace(/[„"«»]/g, '"')
+    .replace(/[„“"«»]/g, '"')
     .replace(/['']/g, "'")
   
   const cleanGermanText = textFields.german_translation_text
