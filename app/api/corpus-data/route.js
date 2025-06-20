@@ -19,25 +19,59 @@ export async function GET(request) {
 
     switch (type) {
       case 'parallel':
-        if (!textId) {
-          return Response.json({ error: 'TextId required for parallel sentences' }, { status: 400 })
+        if (textId) {
+          // Get sentences for specific text
+          ({ data, error } = await supabase
+            .from('parallel_corpus')
+            .select('*')
+            .eq('source_text_id', textId)
+            .order('sentence_order', { ascending: true }))
+        } else {
+          // Get all sentences with text info
+          ({ data, error } = await supabase
+            .from('parallel_corpus')
+            .select(`
+              *,
+              texts!inner(title)
+            `)
+            .order('created_at', { ascending: false }))
+          
+          // Add source text title to each sentence
+          if (data) {
+            data = data.map(sentence => ({
+              ...sentence,
+              source_text_title: sentence.texts?.title || 'Untitled'
+            }))
+          }
         }
-        ({ data, error } = await supabase
-          .from('parallel_corpus')
-          .select('*')
-          .eq('source_text_id', textId)
-          .order('sentence_order', { ascending: true }))
         break
 
       case 'features':
-        if (!textId) {
-          return Response.json({ error: 'TextId required for features' }, { status: 400 })
+        if (textId) {
+          // Get features for specific text
+          ({ data, error } = await supabase
+            .from('linguistic_features')
+            .select('*')
+            .eq('source_text_id', textId)
+            .order('created_at', { ascending: true }))
+        } else {
+          // Get all features with text info
+          ({ data, error } = await supabase
+            .from('linguistic_features')
+            .select(`
+              *,
+              texts!inner(title)
+            `)
+            .order('created_at', { ascending: false }))
+          
+          // Add source text title to each feature
+          if (data) {
+            data = data.map(feature => ({
+              ...feature,
+              source_text_title: feature.texts?.title || 'Untitled'
+            }))
+          }
         }
-        ({ data, error } = await supabase
-          .from('linguistic_features')
-          .select('*')
-          .eq('source_text_id', textId)
-          .order('created_at', { ascending: true }))
         break
 
       case 'vocabulary':
