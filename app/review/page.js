@@ -506,16 +506,16 @@ export default function TextReview() {
 
     // Clean quotation marks in the texts before including them
     const cleanHalunderText = textFields.complete_helgolandic_text
-      .replace(/[„""«»‹›]/g, '"')
-      .replace(/[‚'']/g, "'")
+      .replace(/[„""«»]/g, '"')
+      .replace(/['']/g, "'")
     
     const cleanGermanText = textFields.german_translation_text
-      .replace(/[„""«»‹›]/g, '"')
-      .replace(/[‚'']/g, "'")
+      .replace(/[„""«»]/g, '"')
+      .replace(/['']/g, "'")
     
     const cleanEditorialIntroduction = (textFields.editorial_introduction || '')
-      .replace(/[„""«»‹›]/g, '"')
-      .replace(/[‚'']/g, "'")
+      .replace(/[„""«»]/g, '"')
+      .replace(/['']/g, "'")
 
     const prompt = `**TASK: Create High-Quality Parallel Corpus for Halunder-German Neural Translation Model Training**
 
@@ -541,9 +541,9 @@ export default function TextReview() {
   - En dash (–) → -
 - Replace special spaces (non-breaking, etc.) with regular spaces
 - Escape special JSON characters:
-  - Backslash \\ → \\\\
-  - Newline → \\n
-  - Tab → \\t
+  - Backslash \ → \\
+  - Newline → \n
+  - Tab → \t
   - Already normalized quotes don't need escaping
 - Fix obvious OCR errors:
   - Common substitutions: 1→l, 0→o, rn→m
@@ -555,7 +555,7 @@ export default function TextReview() {
 2. Match sentences by semantic content, not position
 3. Include ALL Halunder sentences (even without German parallels)
 4. Process ALL text sections: titles, editorial notes, translation aids, main text
-5. For multiple valid translations, create separate entries
+5. For multiple valid translations, create separate sentence pair entries
 
 **TEXT METADATA**:
 Title: ${textFields.title || 'N/A'}
@@ -605,8 +605,8 @@ Create concise, factual explanations in German for:
 
 **JSON SAFETY RULES**:
 - Use ONLY straight double quotes (") for JSON strings
-- Escape any quotes WITHIN strings as \\"
-- Replace newlines in text with \\n
+- Escape any quotes WITHIN strings as \"
+- Replace newlines in text with \n
 - Ensure all strings are properly closed
 - No trailing commas in arrays or objects
 - Validate special characters are escaped
@@ -621,8 +621,9 @@ Create concise, factual explanations in German for:
   ],
   "additionalSentences": [
     {
-      "halunder": "Halunder sentences without German parallel",
-      "reason": "no_parallel|unclear_alignment|editorial_only"
+      "language": "halunder",
+      "sentence": "Halunder sentence without German parallel",
+      "context": "Explanation of why this has no German equivalent"
     }
   ],
   "linguisticFeatures": [
@@ -633,28 +634,15 @@ Create concise, factual explanations in German for:
       "type": "idiom|phrase|cultural|etymology|grammar|other",
       "occurrences": ["List of sentences containing this term"]
     }
-  ],
-  "multipleTranslations": [
-    {
-      "halunder": "Sentence with multiple valid translations",
-      "german_variants": ["Translation 1", "Translation 2"],
-      "context": "Brief explanation of translation choices"
-    }
-  ],
-  "dataQuality": {
-    "totalHalunderSentences": number,
-    "totalAlignedPairs": number,
-    "characterNormalizations": [
-      {
-        "original": "„example"",
-        "normalized": "\\"example\\"",
-        "count": number
-      }
-    ],
-    "ocrCorrections": ["List of corrected errors"],
-    "alignmentNotes": ["Any alignment challenges or decisions"]
-  }
+  ]
 }
+
+**SPECIAL INSTRUCTIONS FOR MULTIPLE TRANSLATIONS**:
+- If a Halunder sentence has multiple valid German translations, include ALL of them as separate sentence pairs
+- Simply list them one after another in the sentencePairs array
+- Example: If "Halunder sentence X" can be translated as both "German A" and "German B", include both:
+  { "halunder": "X", "german": "A" },
+  { "halunder": "X", "german": "B" }
 
 **PROCESSING CHECKLIST**:
 □ All quotation marks normalized to ASCII
@@ -665,7 +653,7 @@ Create concise, factual explanations in German for:
 □ Multi-line sentences properly joined
 □ All text sections included
 □ Linguistic features extracted with tooltip-friendly explanations
-□ Multiple translation variants captured
+□ Alternative translations included as regular sentence pairs
 □ JSON validity verified (no syntax errors)
 □ Character normalization documented
 □ Only allowed types used (idiom, phrase, cultural, etymology, grammar, other)
@@ -674,7 +662,7 @@ Create concise, factual explanations in German for:
 Before finalizing, ensure:
 - All strings use straight quotes (")
 - No unescaped quotes within strings
-- No unescaped newlines (use \\n)
+- No unescaped newlines (use \n)
 - No trailing commas
 - All brackets/braces properly paired
 - Numbers are not quoted
@@ -684,7 +672,8 @@ Before finalizing, ensure:
 - This data will train a neural model - consistency is critical!
 - Invalid JSON will break the training pipeline
 - Character normalization ensures consistent model input
-- Use ONLY the six allowed type categories`
+- Use ONLY the six allowed type categories
+- Multiple translations go in sentencePairs as separate entries, not in a special section`
 
     try {
       navigator.clipboard.writeText(prompt)
