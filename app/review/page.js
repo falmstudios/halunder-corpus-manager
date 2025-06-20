@@ -13,6 +13,16 @@ export default function TextReview() {
   const [bucketCounts, setBucketCounts] = useState({})
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   
+  // Bucket management
+  const [customBuckets, setCustomBuckets] = useState({})
+  const [showNewBucketForm, setShowNewBucketForm] = useState(false)
+  const [newBucketName, setNewBucketName] = useState('')
+  const [newBucketColor, setNewBucketColor] = useState('#6c757d')
+  
+  // Drag and drop
+  const [draggedText, setDraggedText] = useState(null)
+  const [dragOverBucket, setDragOverBucket] = useState(null)
+  
   // Sentence processing
   const [showSentenceProcessor, setShowSentenceProcessor] = useState(false)
   const [sentenceProcessing, setSentenceProcessing] = useState(false)
@@ -25,10 +35,12 @@ export default function TextReview() {
   const [linguisticFeatures, setLinguisticFeatures] = useState([])
   const [sentencesLoading, setSentencesLoading] = useState(false)
   
-  // State preservation refs
-  const currentTextIdRef = useRef(null)
+  // Track which texts have processed sentences
+  const [processedTextIds, setProcessedTextIds] = useState(new Set())
+  
+  // Use refs to maintain state during refreshes
+  const currentTextRef = useRef(null)
   const selectedBucketRef = useRef('pending')
-  const searchTermRef = useRef('')
   
   // Editable text fields
   const [textFields, setTextFields] = useState({
@@ -63,7 +75,7 @@ export default function TextReview() {
   
   const [translationAids, setTranslationAids] = useState([])
 
-  const buckets = {
+  const defaultBuckets = {
     pending: { label: 'Pending Review', color: '#ffc107' },
     parallel_confirmed: { label: 'Parallel Confirmed', color: '#28a745' },
     german_available: { label: 'German Available', color: '#17a2b8' },
@@ -71,90 +83,30 @@ export default function TextReview() {
     deleted: { label: 'Deleted', color: '#dc3545' }
   }
 
+  // Combine default and custom buckets
+  const allBuckets = { ...defaultBuckets, ...customBuckets }
+
   // Update refs when state changes
   useEffect(() => {
-    currentTextIdRef.current = currentText?.id || null
+    currentTextRef.current = currentText
+  }, [currentText])
+
+  useEffect(() => {
     selectedBucketRef.current = selectedBucket
-    searchTermRef.current = searchTerm
-  }, [currentText, selectedBucket, searchTerm])
-
-  // Load bucket counts with proper refresh
-  const loadBucketCounts = async (silent = false) => {
-    try {
-      const response = await fetch('/api/bucket-counts')
-      const result = await response.json()
-      
-      if (response.ok) {
-        setBucketCounts(result.counts)
-      }
-    } catch (err) {
-      if (!silent) {
-        console.error('Failed to load bucket counts:', err)
-      }
-    }
-  }
-
-  // Load texts with state preservation
-  const loadTexts = async (preserveSelection = false) => {
-    if (!preserveSelection) {
-      setLoading(true)
-    }
-    setError('')
-    
-    try {
-      const params = new URLSearchParams({
-        bucket: selectedBucketRef.current,
-        search: searchTermRef.current
-      })
-      
-      const response = await fetch(`/api/review-texts?${params}`)
-      const result = await response.json()
-      
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to load texts')
-      }
-      
-      setTexts(result.texts)
-      
-      if (preserveSelection && currentTextIdRef.current) {
-        // Try to preserve current text selection
-        const foundText = result.texts.find(t => t.id === currentTextIdRef.current)
-        if (foundText) {
-          setCurrentText(foundText)
-        } else if (result.texts.length > 0) {
-          setCurrentText(result.texts[0])
-        } else {
-          setCurrentText(null)
-        }
-      } else if (!preserveSelection) {
-        // Only set first text if not preserving selection
-        setCurrentText(result.texts[0] || null)
-      }
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      if (!preserveSelection) {
-        setLoading(false)
-      }
-    }
-  }
-
-  // Initial load
-  useEffect(() => {
-    loadBucketCounts()
-    loadTexts()
-  }, [])
-
-  // Load when bucket changes (not preserving selection)
-  useEffect(() => {
-    loadTexts()
   }, [selectedBucket])
 
-  // Auto-refresh every 10 seconds with state preservation
+  useEffect(() => {
+    loadCustomBuckets()
+    loadTexts()
+    loadProcessedTexts()
+    loadBucketCounts()
+  }, [selectedBucket])
+
+  // Set up periodic refresh of bucket counts every 10 seconds (reduced from 30)
   useEffect(() => {
     const interval = setInterval(() => {
-      loadBucketCounts(true) // Silent bucket count refresh
-      loadTexts(true) // Preserve current selection
+      loadBucketCounts(true) // true = silent refresh
+      loadProcessedTexts(true) // true = silent refresh
     }, 10000)
 
     return () => clearInterval(interval)
@@ -206,6 +158,213 @@ export default function TextReview() {
     }
   }, [currentText])
 
+  // Load custom buckets from database
+  const loadCustomBuckets = async () => {
+    try {
+      const response = await fetch('/api/custom-buckets')
+      const result = await response.json()
+      
+      if (response.ok) {
+        const buckets = {}
+        result.buckets.forEach(bucket => {
+          buckets[bucket.bucket_key] = {
+            label: bucket.label,
+            color: bucket.color
+          }
+        })
+        setCustomBuckets(buckets)
+      }
+    } catch (err) {
+      console.error('Failed to load custom buckets:', err)
+    }
+  }
+
+  // Create new bucket
+  const createNewBucket = async () => {
+    if (!newBucketName.trim()) {
+      setError('Bucket name is required')
+      return
+    }
+    
+    try {
+      const response = await fetch('/api/custom-buckets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newBucketName.trim(),
+          color: newBucketColor
+        })
+      })
+      
+      const result = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create bucket')
+      }
+      
+      // Refresh both custom buckets and counts
+      await Promise.all([
+        loadCustomBuckets(),
+        loadBucketCounts()
+      ])
+      
+      setNewBucketName('')
+      setNewBucketColor('#6c757d')
+      setShowNewBucketForm(false)
+      setError('')
+      
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  // Delete custom bucket
+  const deleteCustomBucket = async (bucketKey) => {
+    if (defaultBuckets[bucketKey]) {
+      setError('Cannot delete default buckets')
+      return
+    }
+    
+    if (confirm(`Are you sure you want to delete the "${customBuckets[bucketKey].label}" bucket?`)) {
+      try {
+        const response = await fetch(`/api/custom-buckets?bucketKey=${bucketKey}`, {
+          method: 'DELETE'
+        })
+        
+        if (!response.ok) {
+          const result = await response.json()
+          throw new Error(result.error || 'Failed to delete bucket')
+        }
+        
+        // Refresh both custom buckets and counts
+        await Promise.all([
+          loadCustomBuckets(),
+          loadBucketCounts()
+        ])
+        
+        // Switch to pending bucket if deleting current bucket
+        if (selectedBucket === bucketKey) {
+          setSelectedBucket('pending')
+        }
+        
+      } catch (err) {
+        setError(err.message)
+      }
+    }
+  }
+
+  // Drag and drop handlers
+  const handleDragStart = (e, text) => {
+    setDraggedText(text)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragOver = (e, bucketKey) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverBucket(bucketKey)
+  }
+
+  const handleDragLeave = () => {
+    setDragOverBucket(null)
+  }
+
+  const handleDrop = async (e, bucketKey) => {
+    e.preventDefault()
+    setDragOverBucket(null)
+    
+    if (!draggedText || bucketKey === selectedBucket) {
+      setDraggedText(null)
+      return
+    }
+    
+    try {
+      await moveTextToBucket(bucketKey, draggedText.id)
+      setDraggedText(null)
+    } catch (err) {
+      setError(`Failed to move text: ${err.message}`)
+      setDraggedText(null)
+    }
+  }
+
+  const loadBucketCounts = async (silent = false) => {
+    try {
+      const response = await fetch('/api/bucket-counts')
+      const result = await response.json()
+      
+      if (response.ok) {
+        setBucketCounts(result.counts)
+        if (!silent) {
+          console.log('Bucket counts updated:', result.counts)
+        }
+      } else {
+        console.error('Failed to load bucket counts:', result.error)
+      }
+    } catch (err) {
+      console.error('Failed to load bucket counts:', err)
+    }
+  }
+
+  const loadProcessedTexts = async (silent = false) => {
+    try {
+      const response = await fetch('/api/corpus-texts')
+      const result = await response.json()
+      
+      if (response.ok) {
+        const processedIds = new Set(result.texts.map(text => text.id))
+        setProcessedTextIds(processedIds)
+      }
+    } catch (err) {
+      if (!silent) {
+        console.error('Failed to load processed texts:', err)
+      }
+    }
+  }
+
+  const loadTexts = async (preserveSelection = false) => {
+    if (!preserveSelection) {
+      setLoading(true)
+    }
+    setError('')
+    
+    try {
+      const params = new URLSearchParams({
+        bucket: selectedBucket,
+        search: searchTerm
+      })
+      
+      const response = await fetch(`/api/review-texts?${params}`)
+      const result = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to load texts')
+      }
+      
+      setTexts(result.texts)
+      
+      // Preserve current text selection if it still exists in the new results
+      if (preserveSelection && currentTextRef.current) {
+        const stillExists = result.texts.find(t => t.id === currentTextRef.current.id)
+        if (stillExists) {
+          setCurrentText(stillExists)
+        } else {
+          setCurrentText(result.texts[0] || null)
+        }
+      } else if (!preserveSelection) {
+        // Only change selection if not preserving
+        if (!currentText || !result.texts.find(t => t.id === currentText.id)) {
+          setCurrentText(result.texts[0] || null)
+        }
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      if (!preserveSelection) {
+        setLoading(false)
+      }
+    }
+  }
+
   const loadTranslationAids = async (textId) => {
     try {
       const response = await fetch(`/api/translation-aids?textId=${textId}`)
@@ -256,20 +415,21 @@ export default function TextReview() {
     setCurrentText(text)
   }
 
-  const moveTextToBucket = async (bucketName) => {
-    if (!currentText) return
+  const moveTextToBucket = async (bucketName, textId = null) => {
+    const targetTextId = textId || currentText?.id
+    if (!targetTextId) return
     
-    if (hasUnsavedChanges) {
+    if (!textId && hasUnsavedChanges) {
       await saveChanges()
     }
     
     try {
-      const response = await fetch('/api/move-text', {
+      const response = await fetch('/api/update-text-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          textId: currentText.id,
-          bucket: bucketName
+          id: targetTextId,
+          status: bucketName
         })
       })
 
@@ -278,12 +438,15 @@ export default function TextReview() {
         throw new Error(result.error || 'Failed to move text')
       }
 
-      // Immediate refresh of counts and texts
-      await loadBucketCounts()
-      await loadTexts(true) // Preserve selection
+      // Immediately refresh bucket counts and texts, preserving selection
+      await Promise.all([
+        loadBucketCounts(),
+        loadTexts(true) // true = preserve selection
+      ])
       
     } catch (err) {
       setError(err.message)
+      throw err
     }
   }
 
@@ -294,25 +457,35 @@ export default function TextReview() {
     setError('')
     
     try {
-      const response = await fetch('/api/update-text', {
+      console.log('Saving changes...', {
+        textId: currentText.id,
+        textFields,
+        documentFields
+      })
+      
+      const response = await fetch('/api/save-text', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          textId: currentText.id,
-          textFields,
-          documentFields
+          id: currentText.id,
+          ...textFields,
+          translation_aids: translationAids,
+          document_metadata: documentFields
         })
       })
 
       const result = await response.json()
+      console.log('Save response:', result)
 
       if (!response.ok) {
         throw new Error(result.error || 'Failed to save changes')
       }
 
       setHasUnsavedChanges(false)
+      console.log('Save successful')
       
     } catch (err) {
+      console.error('Save error:', err)
       setError(err.message)
     } finally {
       setSaving(false)
@@ -320,13 +493,13 @@ export default function TextReview() {
   }
 
   const copyJsonPrompt = () => {
-  if (!currentText) return
+    if (!currentText) return
 
-  const translationAidsText = translationAids
-    .map(aid => `${aid.number} ${aid.term}: ${aid.explanation}`)
-    .join('\n')
+    const translationAidsText = translationAids
+      .map(aid => `${aid.number} ${aid.term}: ${aid.explanation}`)
+      .join('\n')
 
-  const prompt = `Please analyze this Halunder text and create parallel sentence pairs. Extract all sentence pairs between Halunder and German, identify additional Halunder-only sentences, and note linguistic features like idioms, cultural terms, and etymological information.
+    const prompt = `Please analyze this Halunder text and create parallel sentence pairs. Extract all sentence pairs between Halunder and German, identify additional Halunder-only sentences, and note linguistic features like idioms, cultural terms, and etymological information.
 
 **Text Information:**
 Title: ${textFields.title || 'N/A'}
@@ -474,22 +647,21 @@ CORRECT (separate entries):
   "type": "idiom"
 }`
 
-  try {
-    navigator.clipboard.writeText(prompt)
-    alert('JSON prompt copied to clipboard!')
-  } catch (err) {
-    console.error('Failed to copy to clipboard:', err)
-    // Fallback
-    const textarea = document.createElement('textarea')
-    textarea.value = prompt
-    document.body.appendChild(textarea)
-    textarea.select()
-    document.execCommand('copy')
-    document.body.removeChild(textarea)
-    alert('JSON prompt copied to clipboard!')
+    try {
+      navigator.clipboard.writeText(prompt)
+      alert('JSON prompt copied to clipboard!')
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err)
+      // Fallback
+      const textarea = document.createElement('textarea')
+      textarea.value = prompt
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+      alert('JSON prompt copied to clipboard!')
+    }
   }
-}
-
   const processSentenceJson = async () => {
     if (!currentText || !jsonInput.trim()) {
       setError('Please provide JSON data')
@@ -519,10 +691,12 @@ CORRECT (separate entries):
       setJsonInput('')
       setShowSentenceProcessor(false)
       
-      // Reload processed sentences and refresh counts
-      await loadProcessedSentences(currentText.id)
-      await loadBucketCounts()
-      await loadTexts(true) // Preserve selection but refresh data
+      // Reload processed sentences and update processed texts list
+      await Promise.all([
+        loadProcessedSentences(currentText.id),
+        loadProcessedTexts(),
+        loadBucketCounts()
+      ])
 
     } catch (err) {
       setError(err.message)
@@ -561,27 +735,168 @@ CORRECT (separate entries):
 
         {/* Bucket Selection */}
         <div style={{ padding: '15px', borderBottom: '1px solid #ddd' }}>
-          <h3 style={{ margin: '0 0 10px 0', fontSize: '16px' }}>Buckets</h3>
-          {Object.entries(buckets).map(([key, bucket]) => (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <h3 style={{ margin: 0, fontSize: '16px' }}>Buckets</h3>
             <button
-              key={key}
-              onClick={() => setSelectedBucket(key)}
+              onClick={() => setShowNewBucketForm(!showNewBucketForm)}
               style={{
-                display: 'block',
-                width: '100%',
-                padding: '8px 12px',
-                margin: '4px 0',
+                padding: '4px 8px',
+                backgroundColor: '#007bff',
+                color: 'white',
                 border: 'none',
                 borderRadius: '4px',
-                backgroundColor: selectedBucket === key ? bucket.color : '#e9ecef',
-                color: selectedBucket === key ? 'white' : '#333',
                 cursor: 'pointer',
-                fontSize: '14px',
-                textAlign: 'left'
+                fontSize: '12px'
               }}
             >
-              {bucket.label} ({bucketCounts[key] || 0})
+              + New
             </button>
+          </div>
+          
+          {/* New Bucket Form */}
+          {showNewBucketForm && (
+            <div style={{ 
+              padding: '10px', 
+              backgroundColor: '#fff', 
+              border: '1px solid #ddd', 
+              borderRadius: '4px', 
+              marginBottom: '10px' 
+            }}>
+              <input
+                type="text"
+                placeholder="Bucket name"
+                value={newBucketName}
+                onChange={(e) => setNewBucketName(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '6px',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                  marginBottom: '8px'
+                }}
+              />
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                <input
+                  type="color"
+                  value={newBucketColor}
+                  onChange={(e) => setNewBucketColor(e.target.value)}
+                  style={{ width: '30px', height: '24px', border: 'none', borderRadius: '4px' }}
+                />
+                <input
+                  type="text"
+                  value={newBucketColor}
+                  onChange={(e) => setNewBucketColor(e.target.value)}
+                  style={{
+                    flex: 1,
+                    padding: '4px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                    fontSize: '11px'
+                  }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  onClick={createNewBucket}
+                  style={{
+                    flex: 1,
+                    padding: '6px',
+                    backgroundColor: '#28a745',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '11px'
+                  }}
+                >
+                  Create
+                </button>
+                <button
+                  onClick={() => {
+                    setShowNewBucketForm(false)
+                    setNewBucketName('')
+                    setNewBucketColor('#6c757d')
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '6px',
+                    backgroundColor: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '11px'
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {/* Bucket List */}
+          {Object.entries(allBuckets).map(([key, bucket]) => (
+            <div
+              key={key}
+              onDragOver={(e) => handleDragOver(e, key)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, key)}
+              style={{
+                position: 'relative',
+                margin: '4px 0',
+                borderRadius: '4px',
+                border: dragOverBucket === key ? '2px dashed #007bff' : '2px solid transparent'
+              }}
+            >
+              <button
+                onClick={() => setSelectedBucket(key)}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  backgroundColor: selectedBucket === key ? bucket.color : '#e9ecef',
+                  color: selectedBucket === key ? 'white' : '#333',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  textAlign: 'left'
+                }}
+              >
+                {bucket.label} ({bucketCounts[key] || 0})
+              </button>
+              
+              {/* Delete button for custom buckets */}
+              {customBuckets[key] && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    deleteCustomBucket(key)
+                  }}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    width: '16px',
+                    height: '16px',
+                    backgroundColor: '#dc3545',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '50%',
+                    cursor: 'pointer',
+                    fontSize: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  title="Delete bucket"
+                >
+                  ×
+                </button>
+              )}
+            </div>
           ))}
         </div>
 
@@ -602,7 +917,7 @@ CORRECT (separate entries):
             }}
           />
           <button
-            onClick={() => loadTexts()}
+            onClick={loadTexts}
             style={{
               width: '100%',
               marginTop: '8px',
@@ -626,37 +941,58 @@ CORRECT (separate entries):
             texts.map(text => (
               <div
                 key={text.id}
+                draggable
+                onDragStart={(e) => handleDragStart(e, text)}
                 onClick={() => selectText(text)}
                 style={{
                   padding: '10px',
                   margin: '5px 0',
-                  backgroundColor: currentText?.id === text.id ? '#e3f2fd' : 'white',
+                  backgroundColor: currentText?.id === text.id ? '#e3f2fd' : 
+                                 processedTextIds.has(text.id) ? '#e8f5e9' : 'white',
                   border: '1px solid #ddd',
                   borderRadius: '4px',
-                  cursor: 'pointer',
+                  cursor: 'grab',
                   fontSize: '12px',
                   position: 'relative'
                 }}
+                onMouseDown={(e) => e.currentTarget.style.cursor = 'grabbing'}
+                onMouseUp={(e) => e.currentTarget.style.cursor = 'grab'}
               >
-                <div style={{ fontWeight: 'bold' }}>
-                  {text.title || 'Untitled'}
-                  {/* Green dot for processed sentences */}
-                  {text.has_processed_sentences && (
-                    <span style={{
-                      display: 'inline-block',
-                      width: '8px',
-                      height: '8px',
-                      backgroundColor: '#28a745',
-                      borderRadius: '50%',
-                      marginLeft: '8px'
-                    }}></span>
-                  )}
-                </div>
-                {text.author && (
-                  <div style={{ color: '#666' }}>by {text.author}</div>
+                {/* Green dot indicator for processed texts */}
+                {processedTextIds.has(text.id) && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '8px',
+                    right: '8px',
+                    width: '8px',
+                    height: '8px',
+                    backgroundColor: '#28a745',
+                    borderRadius: '50%'
+                  }} />
                 )}
-                <div style={{ color: '#999', fontSize: '11px' }}>
-                  {text.documents?.publication} ({text.documents?.year})
+                
+                {/* Drag handle */}
+                <div style={{
+                  position: 'absolute',
+                  left: '4px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: '#ccc',
+                  fontSize: '10px'
+                }}>
+                  ⋮⋮
+                </div>
+                
+                <div style={{ marginLeft: '15px' }}>
+                  <div style={{ fontWeight: 'bold' }}>
+                    {text.title || 'Untitled'}
+                  </div>
+                  {text.author && (
+                    <div style={{ color: '#666' }}>by {text.author}</div>
+                  )}
+                  <div style={{ color: '#999', fontSize: '11px' }}>
+                    {text.documents?.publication} ({text.documents?.year})
+                  </div>
                 </div>
               </div>
             ))
@@ -705,38 +1041,35 @@ CORRECT (separate entries):
                 {showProcessedSentences ? 'Hide' : 'Show'} Processed Sentences ({parallelSentences.length})
               </button>
               
-              {currentText.review_status === 'parallel_confirmed' && (
-                <>
-                  <button
-                    onClick={copyJsonPrompt}
-                    style={{
-                      padding: '8px 16px',
-                      backgroundColor: '#fd7e14',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '14px'
-                    }}
-                  >
-                    Copy JSON Prompt
-                  </button>
-                  <button
-                    onClick={() => setShowSentenceProcessor(!showSentenceProcessor)}
-                    style={{
-                      padding: '8px 16px',
-                      backgroundColor: '#28a745',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '14px'
-                    }}
-                  >
-                    {showSentenceProcessor ? 'Hide' : 'Process'} Sentences
-                  </button>
-                </>
-              )}
+              {/* Show copy and process buttons for all buckets */}
+              <button
+                onClick={copyJsonPrompt}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#fd7e14',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                Copy JSON Prompt
+              </button>
+              <button
+                onClick={() => setShowSentenceProcessor(!showSentenceProcessor)}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                {showSentenceProcessor ? 'Hide' : 'Process'} Sentences
+              </button>
               
               <button
                 onClick={saveChanges}
@@ -925,13 +1258,17 @@ CORRECT (separate entries):
           </div>
         )}
 
-        {/* Main editing area */}
+        {/* Main editing area - rest of the component stays the same */}
         <div style={{ flex: 1, padding: '20px', overflow: 'auto' }}>
           
           {!currentText ? (
             <div style={{ textAlign: 'center', padding: '50px', color: '#666' }}>
               <h3>Select a text to review</h3>
               <p>Choose a text from the sidebar to start reviewing.</p>
+              <p style={{ fontSize: '12px', marginTop: '20px' }}>
+                💡 <strong>Tip:</strong> Drag texts between buckets to organize them quickly!<br/>
+                Create custom buckets with the "+ New" button.
+              </p>
             </div>
           ) : (
             <>
@@ -1141,7 +1478,7 @@ CORRECT (separate entries):
               <div style={{ marginTop: '30px', padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
                 <h3 style={{ marginBottom: '15px', color: '#333' }}>Move to Bucket</h3>
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                  {Object.entries(buckets).map(([key, bucket]) => {
+                  {Object.entries(allBuckets).map(([key, bucket]) => {
                     if (key === selectedBucket) return null
                     return (
                       <button
