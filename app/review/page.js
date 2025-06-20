@@ -416,40 +416,42 @@ export default function TextReview() {
   }
 
   const moveTextToBucket = async (bucketName, textId = null) => {
-    const targetTextId = textId || currentText?.id
-    if (!targetTextId) return
-    
-    if (!textId && hasUnsavedChanges) {
-      await saveChanges()
-    }
-    
-    try {
-      const response = await fetch('/api/update-text-status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: targetTextId,
-          status: bucketName
-        })
-      })
-
-      if (!response.ok) {
-        const result = await response.json()
-        throw new Error(result.error || 'Failed to move text')
-      }
-
-      // Immediately refresh bucket counts and texts, preserving selection
-      await Promise.all([
-        loadBucketCounts(),
-        loadTexts(true) // true = preserve selection
-      ])
-      
-    } catch (err) {
-      setError(err.message)
-      throw err
-    }
+  const targetTextId = textId || currentText?.id
+  if (!targetTextId) return
+  
+  if (!textId && hasUnsavedChanges) {
+    await saveChanges()
   }
+  
+  try {
+    const response = await fetch('/api/update-text-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: targetTextId,
+        status: bucketName
+      })
+    })
 
+    if (!response.ok) {
+      const result = await response.json()
+      throw new Error(result.error || 'Failed to move text')
+    }
+
+    // Add a small delay to ensure database consistency
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    // Refresh bucket counts first, then texts sequentially (not in parallel)
+    await loadBucketCounts()
+    await loadTexts(true) // true = preserve selection
+    
+    console.log('Text moved successfully, counts updated')
+    
+  } catch (err) {
+    setError(err.message)
+    throw err
+  }
+}
   const saveChanges = async () => {
     if (!currentText) return
     
