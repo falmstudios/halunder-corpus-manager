@@ -632,7 +632,6 @@ Create concise, factual explanations in German for:
       "german_equivalent": "German translation or N/A",
       "explanation": "Etymologie: [origin]. Bedeutung: [meaning]. Kultureller Kontext: [if applicable]. Vergleich: [if applicable]",
       "type": "idiom|phrase|cultural|etymology|grammar|other",
-      "occurrences": ["List of sentences containing this term"]
     }
   ]
 }
