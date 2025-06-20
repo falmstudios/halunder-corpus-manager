@@ -288,22 +288,24 @@ export default function TextReview() {
   }
 
   const loadBucketCounts = async (silent = false) => {
-    try {
-      const response = await fetch('/api/bucket-counts')
-      const result = await response.json()
-      
-      if (response.ok) {
-        setBucketCounts(result.counts)
-        if (!silent) {
-          console.log('Bucket counts updated:', result.counts)
-        }
-      } else {
-        console.error('Failed to load bucket counts:', result.error)
+  try {
+    // Add cache busting parameter to ensure fresh data
+    const timestamp = new Date().getTime()
+    const response = await fetch(`/api/bucket-counts?_t=${timestamp}`)
+    const result = await response.json()
+    
+    if (response.ok) {
+      setBucketCounts(result.counts)
+      if (!silent) {
+        console.log('Bucket counts updated:', result.counts)
       }
-    } catch (err) {
-      console.error('Failed to load bucket counts:', err)
+    } else {
+      console.error('Failed to load bucket counts:', result.error)
     }
+  } catch (err) {
+    console.error('Failed to load bucket counts:', err)
   }
+}
 
   const loadProcessedTexts = async (silent = false) => {
     try {
