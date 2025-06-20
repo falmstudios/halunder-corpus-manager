@@ -498,119 +498,208 @@ export default function TextReview() {
   }
 
   const copyJsonPrompt = () => {
-  if (!currentText) return
+    if (!currentText) return
 
-  const translationAidsText = translationAids
-    .map(aid => `${aid.number} ${aid.term}: ${aid.explanation}`)
-    .join('\n')
+    const translationAidsText = translationAids
+      .map(aid => `${aid.number} ${aid.term}: ${aid.explanation}`)
+      .join('\n')
 
-  // Clean quotation marks in the texts before including them
-  const cleanHalunderText = textFields.complete_helgolandic_text
-    .replace(/[„“"«»]/g, '"')
-    .replace(/['']/g, "'")
-  
-  const cleanGermanText = textFields.german_translation_text
-    .replace(/[„“"«»]/g, '"')
-    .replace(/['']/g, "'")
-  
-  const cleanEditorialIntroduction = (textFields.editorial_introduction || '')
-    .replace(/[„“"«»]/g, '"')
-    .replace(/['']/g, "'")
+    // Clean quotation marks in the texts before including them
+    const cleanHalunderText = textFields.complete_helgolandic_text
+      .replace(/[„""«»‹›]/g, '"')
+      .replace(/[‚'']/g, "'")
+    
+    const cleanGermanText = textFields.german_translation_text
+      .replace(/[„""«»‹›]/g, '"')
+      .replace(/[‚'']/g, "'")
+    
+    const cleanEditorialIntroduction = (textFields.editorial_introduction || '')
+      .replace(/[„""«»‹›]/g, '"')
+      .replace(/[‚'']/g, "'")
 
-  const prompt = `Please analyze this Halunder text and create parallel sentence pairs. 
+    const prompt = `**TASK: Create High-Quality Parallel Corpus for Halunder-German Neural Translation Model Training**
 
-**CRITICAL SENTENCE ALIGNMENT RULES:**
-- A single sentence may span multiple lines in poetry - combine them into ONE sentence pair
-- Look for punctuation (. ! ?) to determine actual sentence boundaries, NOT line breaks
-- Align based on semantic meaning, not line-by-line
-- Each sentence pair should represent one complete thought/statement
-- For poetry: if multiple lines form one sentence, combine them with spaces
+**PURPOSE**: Generate aligned sentence pairs suitable for fine-tuning transformer models, with rich linguistic annotations for improved translation quality.
 
-**URGENT: PROCESS THE ENTIRE TEXT - DO NOT SKIP ANY CONTENT. Work from the very first word to the very last word. Every sentence must be included in your output.**
+**CRITICAL REQUIREMENTS FOR ML TRAINING DATA**:
 
-**Example:**
-If Halunder text shows:
-"Äpp bae Willem - ammen (?) tau! -
-Willem Teil"
+1. **EXACT ALIGNMENT**: Each sentence pair must be semantically equivalent
+2. **COMPLETE COVERAGE**: Every sentence must be included (missing data reduces model performance)
+3. **CONSISTENT FORMATTING**: Maintain identical punctuation and capitalization across pairs
+4. **CLEAN DATA**: Fix obvious OCR errors and normalize characters to prevent training noise
+5. **VALID JSON**: Ensure all output is valid JSON with proper escaping
 
-And German shows:
-"Hinauf zu Wilhelm um zwei Grogs.
-Wilhelm Teil"
+**CHARACTER NORMALIZATION RULES**:
+- Replace ALL non-ASCII quotation marks with standard ASCII double quotes ("):
+  - German quotes: „" → ""
+  - French quotes: « » → ""
+  - Angled quotes: ‹ › → ""
+  - Single quotes: ‚' → '
+  - Other variants: " " ' ' → "" or ''
+- Replace special dashes:
+  - Em dash (—) → --
+  - En dash (–) → -
+- Replace special spaces (non-breaking, etc.) with regular spaces
+- Escape special JSON characters:
+  - Backslash \\ → \\\\
+  - Newline → \\n
+  - Tab → \\t
+  - Already normalized quotes don't need escaping
+- Fix obvious OCR errors:
+  - Common substitutions: 1→l, 0→o, rn→m
+  - Broken umlauts: a"→ä, o"→ö, u"→ü
+  - Broken ß: B→ß (in context)
 
-Create ONE sentence pair: "Äpp bae Willem - ammen (?) tau! - Willem Teil" → "Hinauf zu Wilhelm um zwei Grogs. Wilhelm Teil"
+**ALIGNMENT STRATEGY**:
+1. Identify sentence boundaries using: . ! ? ... ;
+2. Match sentences by semantic content, not position
+3. Include ALL Halunder sentences (even without German parallels)
+4. Process ALL text sections: titles, editorial notes, translation aids, main text
+5. For multiple valid translations, create separate entries
 
-**Text Information:**
+**TEXT METADATA**:
 Title: ${textFields.title || 'N/A'}
 Author: ${textFields.author || 'N/A'}
 Translator: ${textFields.translator || 'N/A'}
 Source: ${documentFields.publication || 'N/A'} (${documentFields.year || 'N/A'})
 
-**Halunder Text:**
+**INPUT TEXTS**:
+
+[HALUNDER TEXT START]
 ${cleanHalunderText}
+[HALUNDER TEXT END]
 
-**German Translation:**
+[GERMAN TEXT START]
 ${cleanGermanText}
+[GERMAN TEXT END]
 
-**Editorial Introduction:**
+[EDITORIAL INTRODUCTION START]
 ${cleanEditorialIntroduction || 'N/A'}
+[EDITORIAL INTRODUCTION END]
 
-**Translation Aids:**
+[TRANSLATION AIDS START]
 ${translationAidsText || 'N/A'}
+[TRANSLATION AIDS END]
 
-**INSTRUCTIONS:**
+**LINGUISTIC ANNOTATION GUIDELINES** (For hover-tooltip style digital tool):
 
-**For Sentence Alignment:**
-- Combine lines that form complete sentences - do NOT split at line breaks
-- Look for actual sentence punctuation (. ! ?) to determine sentence boundaries
-- For poetry: "Line 1 text\\nLine 2 continuation." = ONE sentence pair
-- Match complete semantic units, not individual lines
-- Join multiple lines with single spaces when they form one sentence
-- **MANDATORY: Process every single line of text - start to finish, no skipping**
+Create concise, factual explanations in German for:
+- Single words to multi-word expressions
+- Etymology: Origin, language family, development path
+- Compounds: Explain component parts
+- Loanwords: Identify source language
+- Cultural terms: Brief factual context
+- Names/Places: Geographic/historical classification
+- Buildings/Institutions: Relevant background
+- Idioms: Both literal and figurative meanings
+- Grammatical peculiarities specific to Halunder
+- Comparisons to English where helpful (e.g., "Al" = "schon", cf. English "already")
 
-**For Linguistic Features:**
-- Extract linguistic features from throughout the entire text
-- Focus on cultural terms, etymology, idioms, and grammatical features
-- Use ONLY these valid types: "etymology", "idiom", "cultural", "grammatical", "other"
+**ALLOWED TYPES** (use ONLY these):
+- "idiom": Idiomatic expressions with non-literal meanings
+- "phrase": Multi-word expressions or collocations
+- "cultural": Culture-specific terms, customs, places, institutions
+- "etymology": Word origins and historical development
+- "grammar": Grammatical features unique to Halunder
+- "other": Any linguistic feature not fitting above categories
 
-**Output Format (USE STRAIGHT QUOTES ONLY):**
+**JSON SAFETY RULES**:
+- Use ONLY straight double quotes (") for JSON strings
+- Escape any quotes WITHIN strings as \\"
+- Replace newlines in text with \\n
+- Ensure all strings are properly closed
+- No trailing commas in arrays or objects
+- Validate special characters are escaped
+
+**JSON OUTPUT FORMAT** (straight quotes only, properly escaped):
 {
   "sentencePairs": [
     {
-      "halunder": "Complete sentence from Halunder (may span multiple lines joined with spaces)",
-      "german": "Complete corresponding German sentence"
+      "halunder": "Complete Halunder sentence with exact punctuation",
+      "german": "Semantically equivalent German sentence with matching punctuation"
     }
   ],
   "additionalSentences": [
     {
-      "halunder": "Halunder-only sentences without direct German parallel"
+      "halunder": "Halunder sentences without German parallel",
+      "reason": "no_parallel|unclear_alignment|editorial_only"
     }
   ],
   "linguisticFeatures": [
     {
-      "halunder_term": "word or phrase",
-      "german_equivalent": "German translation",
-      "explanation": "Detailed explanation in German",
-      "type": "etymology|idiom|cultural|grammatical|other"
+      "halunder_term": "word/phrase/expression",
+      "german_equivalent": "German translation or N/A",
+      "explanation": "Etymologie: [origin]. Bedeutung: [meaning]. Kultureller Kontext: [if applicable]. Vergleich: [if applicable]",
+      "type": "idiom|phrase|cultural|etymology|grammar|other",
+      "occurrences": ["List of sentences containing this term"]
     }
-  ]
-}
-
-**REMINDER: Use only straight double quotes (") in your JSON response. PROCESS THE COMPLETE TEXT FROM BEGINNING TO END.**`
-
-  try {
-    navigator.clipboard.writeText(prompt)
-    alert('Clean prompt copied to clipboard!')
-  } catch (err) {
-    console.error('Failed to copy to clipboard:', err)
-    const textarea = document.createElement('textarea')
-    textarea.value = prompt
-    document.body.appendChild(textarea)
-    textarea.select()
-    document.execCommand('copy')
-    document.body.removeChild(textarea)
-    alert('Clean prompt copied to clipboard!')
+  ],
+  "multipleTranslations": [
+    {
+      "halunder": "Sentence with multiple valid translations",
+      "german_variants": ["Translation 1", "Translation 2"],
+      "context": "Brief explanation of translation choices"
+    }
+  ],
+  "dataQuality": {
+    "totalHalunderSentences": number,
+    "totalAlignedPairs": number,
+    "characterNormalizations": [
+      {
+        "original": "„example"",
+        "normalized": "\\"example\\"",
+        "count": number
+      }
+    ],
+    "ocrCorrections": ["List of corrected errors"],
+    "alignmentNotes": ["Any alignment challenges or decisions"]
   }
 }
+
+**PROCESSING CHECKLIST**:
+□ All quotation marks normalized to ASCII
+□ Special characters properly escaped for JSON
+□ All sentences from first to last word processed
+□ Punctuation and capitalization matched exactly
+□ OCR errors corrected
+□ Multi-line sentences properly joined
+□ All text sections included
+□ Linguistic features extracted with tooltip-friendly explanations
+□ Multiple translation variants captured
+□ JSON validity verified (no syntax errors)
+□ Character normalization documented
+□ Only allowed types used (idiom, phrase, cultural, etymology, grammar, other)
+
+**JSON VALIDATION CHECK**:
+Before finalizing, ensure:
+- All strings use straight quotes (")
+- No unescaped quotes within strings
+- No unescaped newlines (use \\n)
+- No trailing commas
+- All brackets/braces properly paired
+- Numbers are not quoted
+- Type field contains ONLY: idiom, phrase, cultural, etymology, grammar, other
+
+**REMEMBER**: 
+- This data will train a neural model - consistency is critical!
+- Invalid JSON will break the training pipeline
+- Character normalization ensures consistent model input
+- Use ONLY the six allowed type categories`
+
+    try {
+      navigator.clipboard.writeText(prompt)
+      alert('Clean prompt copied to clipboard!')
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err)
+      const textarea = document.createElement('textarea')
+      textarea.value = prompt
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+      alert('Clean prompt copied to clipboard!')
+    }
+  }
 
   const processSentenceJson = async () => {
     if (!currentText || !jsonInput.trim()) {
