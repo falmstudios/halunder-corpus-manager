@@ -86,6 +86,38 @@ export default function TextReview() {
   // Combine default and custom buckets
   const allBuckets = { ...defaultBuckets, ...customBuckets }
 
+  // Helper function to check if text has translation indicators
+  const getTextTags = (text) => {
+    const tags = []
+    
+    // Only show tags for pending bucket
+    if (selectedBucket !== 'pending') return tags
+    
+    // Check if translator field has input
+    if (text.translator && text.translator.trim() !== '') {
+      tags.push({ label: 'Translator', color: '#007bff' })
+    }
+    
+    // Check if German translation is roughly similar in length to Halunder text
+    const halunderLength = text.complete_helgolandic_text?.length || 0
+    const germanLength = text.german_translation_text?.length || 0
+    
+    if (germanLength > 70 && Math.abs(halunderLength - germanLength) <= 300) {
+      tags.push({ label: 'Similar Length', color: '#17a2b8' })
+    }
+    
+    // Check for translation keywords
+    const searchText = `${text.editorial_introduction || ''} ${text.subtitle || ''}`.toLowerCase()
+    if (searchText.includes('übersetzt') || 
+        searchText.includes('übersetzung') || 
+        searchText.includes('übersetzer') || 
+        searchText.includes('oawersat')) {
+      tags.push({ label: 'Translation Ref', color: '#6f42c1' })
+    }
+    
+    return tags
+  }
+
   // Update refs when state changes
   useEffect(() => {
     currentTextRef.current = currentText
@@ -995,64 +1027,89 @@ Before finalizing, ensure:
           {loading ? (
             <div style={{ textAlign: 'center', padding: '20px' }}>Loading...</div>
           ) : (
-            texts.map(text => (
-              <div
-                key={text.id}
-                draggable
-                onDragStart={(e) => handleDragStart(e, text)}
-                onClick={() => selectText(text)}
-                style={{
-                  padding: '10px',
-                  margin: '5px 0',
-                  backgroundColor: currentText?.id === text.id ? '#e3f2fd' : 
-                                 processedTextIds.has(text.id) ? '#e8f5e9' : 'white',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  cursor: 'grab',
-                  fontSize: '12px',
-                  position: 'relative'
-                }}
-                onMouseDown={(e) => e.currentTarget.style.cursor = 'grabbing'}
-                onMouseUp={(e) => e.currentTarget.style.cursor = 'grab'}
-              >
-                {/* Green dot indicator for processed texts */}
-                {processedTextIds.has(text.id) && (
+            texts.map(text => {
+              const tags = getTextTags(text)
+              
+              return (
+                <div
+                  key={text.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, text)}
+                  onClick={() => selectText(text)}
+                  style={{
+                    padding: '10px',
+                    margin: '5px 0',
+                    backgroundColor: currentText?.id === text.id ? '#e3f2fd' : 
+                                   processedTextIds.has(text.id) ? '#e8f5e9' : 'white',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    cursor: 'grab',
+                    fontSize: '12px',
+                    position: 'relative'
+                  }}
+                  onMouseDown={(e) => e.currentTarget.style.cursor = 'grabbing'}
+                  onMouseUp={(e) => e.currentTarget.style.cursor = 'grab'}
+                >
+                  {/* Green dot indicator for processed texts */}
+                  {processedTextIds.has(text.id) && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '8px',
+                      right: '8px',
+                      width: '8px',
+                      height: '8px',
+                      backgroundColor: '#28a745',
+                      borderRadius: '50%'
+                    }} />
+                  )}
+                  
+                  {/* Drag handle */}
                   <div style={{
                     position: 'absolute',
-                    top: '8px',
-                    right: '8px',
-                    width: '8px',
-                    height: '8px',
-                    backgroundColor: '#28a745',
-                    borderRadius: '50%'
-                  }} />
-                )}
-                
-                {/* Drag handle */}
-                <div style={{
-                  position: 'absolute',
-                  left: '4px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: '#ccc',
-                  fontSize: '10px'
-                }}>
-                  ⋮⋮
-                </div>
-                
-                <div style={{ marginLeft: '15px' }}>
-                  <div style={{ fontWeight: 'bold' }}>
-                    {text.title || 'Untitled'}
+                    left: '4px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: '#ccc',
+                    fontSize: '10px'
+                  }}>
+                    ⋮⋮
                   </div>
-                  {text.author && (
-                    <div style={{ color: '#666' }}>by {text.author}</div>
-                  )}
-                  <div style={{ color: '#999', fontSize: '11px' }}>
-                    {text.documents?.publication} ({text.documents?.year})
+                  
+                  <div style={{ marginLeft: '15px' }}>
+                    <div style={{ fontWeight: 'bold' }}>
+                      {text.title || 'Untitled'}
+                    </div>
+                    {text.author && (
+                      <div style={{ color: '#666' }}>by {text.author}</div>
+                    )}
+                    <div style={{ color: '#999', fontSize: '11px' }}>
+                      {text.documents?.publication} ({text.documents?.year})
+                    </div>
+                    
+                    {/* Tags for pending bucket */}
+                    {tags.length > 0 && (
+                      <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
+                        {tags.map((tag, index) => (
+                          <span
+                            key={index}
+                            style={{
+                              padding: '2px 6px',
+                              backgroundColor: tag.color,
+                              color: 'white',
+                              borderRadius: '3px',
+                              fontSize: '10px',
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            {tag.label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))
+              )
+            })
           )}
         </div>
       </div>
