@@ -510,11 +510,11 @@ export default function TextReview() {
     .replace(/['']/g, "'")
   
   const cleanGermanText = textFields.german_translation_text
-    .replace(/[„"«»]/g, '"')
+    .replace(/[„“"«»]/g, '"')
     .replace(/['']/g, "'")
   
   const cleanEditorialIntroduction = (textFields.editorial_introduction || '')
-    .replace(/[„"«»]/g, '"')
+    .replace(/[„“"«»]/g, '"')
     .replace(/['']/g, "'")
 
   const prompt = `Please analyze this Halunder text and create parallel sentence pairs. 
