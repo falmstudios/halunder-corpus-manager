@@ -504,6 +504,19 @@ export default function TextReview() {
     .map(aid => `${aid.number} ${aid.term}: ${aid.explanation}`)
     .join('\n')
 
+  // Clean quotation marks in the texts before including them
+  const cleanHalunderText = textFields.complete_helgolandic_text
+    .replace(/[„"«»]/g, '"')
+    .replace(/['']/g, "'")
+  
+  const cleanGermanText = textFields.german_translation_text
+    .replace(/[„"«»]/g, '"')
+    .replace(/['']/g, "'")
+  
+  const cleanEditorialIntroduction = (textFields.editorial_introduction || '')
+    .replace(/[„"«»]/g, '"')
+    .replace(/['']/g, "'")
+
   const prompt = `Please analyze this Halunder text and create parallel sentence pairs. 
 
 **CRITICAL SENTENCE ALIGNMENT RULES:**
@@ -533,13 +546,13 @@ Translator: ${textFields.translator || 'N/A'}
 Source: ${documentFields.publication || 'N/A'} (${documentFields.year || 'N/A'})
 
 **Halunder Text:**
-${textFields.complete_helgolandic_text}
+${cleanHalunderText}
 
 **German Translation:**
-${textFields.german_translation_text}
+${cleanGermanText}
 
 **Editorial Introduction:**
-${textFields.editorial_introduction || 'N/A'}
+${cleanEditorialIntroduction || 'N/A'}
 
 **Translation Aids:**
 ${translationAidsText || 'N/A'}
@@ -557,6 +570,7 @@ ${translationAidsText || 'N/A'}
 **For Linguistic Features:**
 - Extract linguistic features from throughout the entire text
 - Focus on cultural terms, etymology, idioms, and grammatical features
+- Use ONLY these valid types: "etymology", "idiom", "cultural", "grammatical", "other"
 
 **Output Format (USE STRAIGHT QUOTES ONLY):**
 {
@@ -581,11 +595,11 @@ ${translationAidsText || 'N/A'}
   ]
 }
 
-**REMINDER: Use only straight double quotes (") in your JSON response, never curly quotes (" "). PROCESS THE COMPLETE TEXT FROM BEGINNING TO END.**`
+**REMINDER: Use only straight double quotes (") in your JSON response. PROCESS THE COMPLETE TEXT FROM BEGINNING TO END.**`
 
   try {
     navigator.clipboard.writeText(prompt)
-    alert('Enhanced JSON prompt copied to clipboard!')
+    alert('Clean prompt copied to clipboard!')
   } catch (err) {
     console.error('Failed to copy to clipboard:', err)
     const textarea = document.createElement('textarea')
@@ -594,7 +608,7 @@ ${translationAidsText || 'N/A'}
     textarea.select()
     document.execCommand('copy')
     document.body.removeChild(textarea)
-    alert('Enhanced JSON prompt copied to clipboard!')
+    alert('Clean prompt copied to clipboard!')
   }
 }
 
