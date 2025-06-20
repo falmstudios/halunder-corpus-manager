@@ -27,6 +27,9 @@ export async function GET(request) {
           source_file,
           halunder_sentence_count,
           filename
+        ),
+        parallel_corpus (
+          id
         )
       `)
     
@@ -52,7 +55,13 @@ export async function GET(request) {
       return Response.json({ error: error.message }, { status: 500 })
     }
     
-    return Response.json({ texts: data || [] })
+    // Transform data to include processed sentence indicator
+    const transformedData = (data || []).map(text => ({
+      ...text,
+      has_processed_sentences: text.parallel_corpus && text.parallel_corpus.length > 0
+    }))
+    
+    return Response.json({ texts: transformedData })
     
   } catch (error) {
     console.error('API error:', error)
