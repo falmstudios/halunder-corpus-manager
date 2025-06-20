@@ -102,15 +102,15 @@ export default function TextReview() {
     loadBucketCounts()
   }, [selectedBucket])
 
-  // Set up periodic refresh of bucket counts every 5 seconds instead of 10
-useEffect(() => {
-  const interval = setInterval(() => {
-    loadBucketCounts(true) // true = silent refresh
-    loadProcessedTexts(true) // true = silent refresh
-  }, 5000) // Reduced from 10000 to 5000
+  // Set up periodic refresh of bucket counts every 5 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadBucketCounts(true) // true = silent refresh
+      loadProcessedTexts(true) // true = silent refresh
+    }, 5000)
 
-  return () => clearInterval(interval)
-}, [])
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     if (currentText) {
@@ -288,24 +288,24 @@ useEffect(() => {
   }
 
   const loadBucketCounts = async (silent = false) => {
-  try {
-    // Add cache busting parameter to ensure fresh data
-    const timestamp = new Date().getTime()
-    const response = await fetch(`/api/bucket-counts?_t=${timestamp}`)
-    const result = await response.json()
-    
-    if (response.ok) {
-      setBucketCounts(result.counts)
-      if (!silent) {
-        console.log('Bucket counts updated:', result.counts)
+    try {
+      // Add cache busting parameter to ensure fresh data
+      const timestamp = new Date().getTime()
+      const response = await fetch(`/api/bucket-counts?_t=${timestamp}`)
+      const result = await response.json()
+      
+      if (response.ok) {
+        setBucketCounts(result.counts)
+        if (!silent) {
+          console.log('Bucket counts updated:', result.counts)
+        }
+      } else {
+        console.error('Failed to load bucket counts:', result.error)
       }
-    } else {
-      console.error('Failed to load bucket counts:', result.error)
+    } catch (err) {
+      console.error('Failed to load bucket counts:', err)
     }
-  } catch (err) {
-    console.error('Failed to load bucket counts:', err)
   }
-}
 
   const loadProcessedTexts = async (silent = false) => {
     try {
@@ -418,42 +418,43 @@ useEffect(() => {
   }
 
   const moveTextToBucket = async (bucketName, textId = null) => {
-  const targetTextId = textId || currentText?.id
-  if (!targetTextId) return
-  
-  if (!textId && hasUnsavedChanges) {
-    await saveChanges()
-  }
-  
-  try {
-    const response = await fetch('/api/update-text-status', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: targetTextId,
-        status: bucketName
-      })
-    })
-
-    if (!response.ok) {
-      const result = await response.json()
-      throw new Error(result.error || 'Failed to move text')
+    const targetTextId = textId || currentText?.id
+    if (!targetTextId) return
+    
+    if (!textId && hasUnsavedChanges) {
+      await saveChanges()
     }
-
-    // Add a small delay to ensure database consistency
-    await new Promise(resolve => setTimeout(resolve, 100))
-
-    // Refresh bucket counts first, then texts sequentially (not in parallel)
-    await loadBucketCounts()
-    await loadTexts(true) // true = preserve selection
     
-    console.log('Text moved successfully, counts updated')
-    
-  } catch (err) {
-    setError(err.message)
-    throw err
+    try {
+      const response = await fetch('/api/update-text-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: targetTextId,
+          status: bucketName
+        })
+      })
+
+      if (!response.ok) {
+        const result = await response.json()
+        throw new Error(result.error || 'Failed to move text')
+      }
+
+      // Add a small delay to ensure database consistency
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      // Refresh bucket counts first, then texts sequentially (not in parallel)
+      await loadBucketCounts()
+      await loadTexts(true) // true = preserve selection
+      
+      console.log('Text moved successfully, counts updated')
+      
+    } catch (err) {
+      setError(err.message)
+      throw err
+    }
   }
-}
+
   const saveChanges = async () => {
     if (!currentText) return
     
@@ -497,19 +498,31 @@ useEffect(() => {
   }
 
   const copyJsonPrompt = () => {
-  if (!currentText) return
+    if (!currentText) return
 
-  const translationAidsText = translationAids
-    .map(aid => `${aid.number} ${aid.term}: ${aid.explanation}`)
-    .join('\n')
+    const translationAidsText = translationAids
+      .map(aid => `${aid.number} ${aid.term}: ${aid.explanation}`)
+      .join('\n')
 
-  const prompt = `Please analyze this Halunder text and create parallel sentence pairs. 
+    const prompt = `Please analyze this Halunder text and create parallel sentence pairs. 
 
 **CRITICAL SENTENCE ALIGNMENT RULES:**
 - A single sentence may span multiple lines in poetry - combine them into ONE sentence pair
 - Look for punctuation (. ! ?) to determine actual sentence boundaries, NOT line breaks
 - Align based on semantic meaning, not line-by-line
 - Each sentence pair should represent one complete thought/statement
+- For poetry: if multiple lines form one sentence, combine them with spaces
+
+**Example:**
+If Halunder text shows:
+"Äpp bae Willem - ammen (?) tau! -
+Willem Teil"
+
+And German shows:
+"Hinauf zu Wilhelm um zwei Grogs.
+Wilhelm Teil"
+
+Create ONE sentence pair: "Äpp bae Willem - ammen (?) tau! - Willem Teil" → "Hinauf zu Wilhelm um zwei Grogs. Wilhelm Teil"
 
 **Text Information:**
 Title: ${textFields.title || 'N/A'}
@@ -534,14 +547,15 @@ ${translationAidsText || 'N/A'}
 **For Sentence Alignment:**
 - Combine lines that form complete sentences - do NOT split at line breaks
 - Look for actual sentence punctuation (. ! ?) to determine sentence boundaries
-- For poetry: "Line 1 text\nLine 2 continuation." = ONE sentence pair
+- For poetry: "Line 1 text\\nLine 2 continuation." = ONE sentence pair
 - Match complete semantic units, not individual lines
+- Join multiple lines with single spaces when they form one sentence
 
 **Output Format:**
 {
   "sentencePairs": [
     {
-      "halunder": "Complete sentence from Halunder (may span multiple lines)",
+      "halunder": "Complete sentence from Halunder (may span multiple lines joined with spaces)",
       "german": "Complete corresponding German sentence"
     }
   ],
@@ -560,21 +574,21 @@ ${translationAidsText || 'N/A'}
   ]
 }`
 
-  try {
-    navigator.clipboard.writeText(prompt)
-    alert('Enhanced JSON prompt copied to clipboard!')
-  } catch (err) {
-    console.error('Failed to copy to clipboard:', err)
-    const textarea = document.createElement('textarea')
-    textarea.value = prompt
-    document.body.appendChild(textarea)
-    textarea.select()
-    document.execCommand('copy')
-    document.body.removeChild(textarea)
-    alert('Enhanced JSON prompt copied to clipboard!')
+    try {
+      navigator.clipboard.writeText(prompt)
+      alert('Enhanced JSON prompt copied to clipboard!')
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err)
+      const textarea = document.createElement('textarea')
+      textarea.value = prompt
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+      alert('Enhanced JSON prompt copied to clipboard!')
+    }
   }
-}
-  }
+
   const processSentenceJson = async () => {
     if (!currentText || !jsonInput.trim()) {
       setError('Please provide JSON data')
@@ -954,7 +968,6 @@ ${translationAidsText || 'N/A'}
                 {showProcessedSentences ? 'Hide' : 'Show'} Processed Sentences ({parallelSentences.length})
               </button>
               
-              {/* Show copy and process buttons for all buckets */}
               <button
                 onClick={copyJsonPrompt}
                 style={{
@@ -1171,7 +1184,7 @@ ${translationAidsText || 'N/A'}
           </div>
         )}
 
-        {/* Main editing area - rest of the component stays the same */}
+        {/* Main editing area */}
         <div style={{ flex: 1, padding: '20px', overflow: 'auto' }}>
           
           {!currentText ? (
