@@ -13,7 +13,6 @@ export default function CorpusViewer() {
 
   useEffect(() => {
     loadProcessedTexts()
-    loadAllCorpusData() // Load all data when no text is selected
   }, [])
 
   useEffect(() => {
@@ -31,7 +30,7 @@ export default function CorpusViewer() {
       
       if (response.ok) {
         setTexts(result.texts)
-        // Don't auto-select first text - show all data by default
+        // Don't auto-select first text - let user choose or see all data
       }
     } catch (err) {
       console.error('Failed to load processed texts:', err)
@@ -137,7 +136,7 @@ export default function CorpusViewer() {
 
       {/* Text Selection */}
       <div style={{ marginBottom: '30px', padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-        <h2 style={{ marginBottom: '15px' }}>Select Processed Text</h2>
+        <h2 style={{ marginBottom: '15px' }}>View Corpus Data</h2>
         <select 
           value={selectedText?.id || ''} 
           onChange={(e) => {
@@ -152,13 +151,18 @@ export default function CorpusViewer() {
             fontSize: '16px'
           }}
         >
-          <option value="">Show all processed sentences</option>
+          <option value="">View all processed sentences</option>
           {texts.map(text => (
             <option key={text.id} value={text.id}>
               {text.title || 'Untitled'} {text.author && `by ${text.author}`}
             </option>
           ))}
         </select>
+        {!selectedText && (
+          <p style={{ margin: '10px 0 0 0', fontSize: '14px', color: '#666' }}>
+            Showing all processed sentences from all texts. Select a specific text to filter results.
+          </p>
+        )}
       </div>
 
       {/* Tabs */}
@@ -194,11 +198,9 @@ export default function CorpusViewer() {
           {/* Parallel Sentences Tab */}
           {activeTab === 'parallel' && (
             <div>
-              <h3>
-                Parallel Sentences {selectedText ? `for "${selectedText.title || 'Untitled'}"` : '(All Texts)'}
-              </h3>
+              <h3>Parallel Sentences {selectedText ? `for "${selectedText.title}"` : '(All Texts)'}</h3>
               {parallelSentences.length === 0 ? (
-                <p>No parallel sentences found.</p>
+                <p>No parallel sentences found{selectedText ? ' for this text' : ''}.</p>
               ) : (
                 <div style={{ display: 'grid', gap: '15px' }}>
                   {parallelSentences.map((sentence, index) => (
@@ -226,8 +228,8 @@ export default function CorpusViewer() {
                         Order: {sentence.sentence_order} | Type: {sentence.source_type}
                         {sentence.confidence_score && ` | Confidence: ${sentence.confidence_score}`}
                         {!selectedText && sentence.source_text_title && (
-                          <span style={{ marginLeft: '10px', fontStyle: 'italic' }}>
-                            from "{sentence.source_text_title}"
+                          <span style={{ marginLeft: '10px' }}>
+                            | From: {sentence.source_text_title}
                           </span>
                         )}
                       </div>
@@ -238,101 +240,4 @@ export default function CorpusViewer() {
             </div>
           )}
 
-          {/* Linguistic Features Tab */}
-          {activeTab === 'features' && (
-            <div>
-              <h3>
-                Linguistic Features {selectedText ? `for "${selectedText.title || 'Untitled'}"` : '(All Texts)'}
-              </h3>
-              {linguisticFeatures.length === 0 ? (
-                <p>No linguistic features found.</p>
-              ) : (
-                <div style={{ display: 'grid', gap: '15px' }}>
-                  {linguisticFeatures.map((feature, index) => (
-                    <div key={feature.id} style={{
-                      padding: '15px',
-                      border: '1px solid #ddd',
-                      borderRadius: '8px',
-                      backgroundColor: 'white'
-                    }}>
-                      <div style={{ marginBottom: '10px' }}>
-                        <strong style={{ color: '#007bff' }}>Term:</strong> {feature.halunder_term}
-                        {feature.german_equivalent && (
-                          <span style={{ marginLeft: '20px' }}>
-                            <strong style={{ color: '#28a745' }}>German:</strong> {feature.german_equivalent}
-                          </span>
-                        )}
-                      </div>
-                      <div>
-                        <strong>Explanation:</strong>
-                        <p style={{ margin: '5px 0', fontStyle: 'italic' }}>
-                          {feature.explanation}
-                        </p>
-                      </div>
-                      <div style={{ marginTop: '10px', fontSize: '12px', color: '#666' }}>
-                        {feature.feature_type && `Type: ${feature.feature_type}`}
-                        {!selectedText && feature.source_text_title && (
-                          <span style={{ marginLeft: '10px', fontStyle: 'italic' }}>
-                            from "{feature.source_text_title}"
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Vocabulary Tab */}
-          {activeTab === 'vocabulary' && (
-            <div>
-              <h3>Vocabulary Tracker</h3>
-              {vocabulary.length === 0 ? (
-                <p>No vocabulary data found.</p>
-              ) : (
-                <div style={{ display: 'grid', gap: '10px' }}>
-                  {vocabulary.map((word, index) => (
-                    <div key={word.id} style={{
-                      padding: '15px',
-                      border: '1px solid #ddd',
-                      borderRadius: '8px',
-                      backgroundColor: 'white',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}>
-                      <div>
-                        <strong style={{ color: '#007bff' }}>{word.halunder_word}</strong>
-                        {word.german_translations && word.german_translations.length > 0 && (
-                          <div style={{ marginTop: '5px', color: '#28a745' }}>
-                            German: {word.german_translations.join(', ')}
-                          </div>
-                        )}
-                      </div>
-                      <div style={{ textAlign: 'right', color: '#666' }}>
-                        <div>Count: {word.frequency_count}</div>
-                        {word.last_seen_at && (
-                          <div style={{ fontSize: '12px' }}>
-                            Last seen: {new Date(word.last_seen_at).toLocaleDateString()}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      )}
-
-      {texts.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
-          <h3>No processed texts found</h3>
-          <p>Process some sentences in the Text Review interface first.</p>
-        </div>
-      )}
-    </div>
-  )
-}
+          {/*
