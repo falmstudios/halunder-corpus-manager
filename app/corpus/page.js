@@ -30,7 +30,6 @@ export default function CorpusViewer() {
       
       if (response.ok) {
         setTexts(result.texts)
-        // Don't auto-select first text - let user choose or see all data
       }
     } catch (err) {
       console.error('Failed to load processed texts:', err)
@@ -67,8 +66,8 @@ export default function CorpusViewer() {
     setLoading(true)
     try {
       const [parallelResponse, featuresResponse, vocabResponse] = await Promise.all([
-        fetch(`/api/corpus-data?type=parallel`), // No textId = get all
-        fetch(`/api/corpus-data?type=features`), // No textId = get all
+        fetch(`/api/corpus-data?type=parallel`),
+        fetch(`/api/corpus-data?type=features`),
         fetch(`/api/corpus-data?type=vocabulary`)
       ])
 
@@ -240,4 +239,92 @@ export default function CorpusViewer() {
             </div>
           )}
 
-          {/*
+          {/* Linguistic Features Tab */}
+          {activeTab === 'features' && (
+            <div>
+              <h3>Linguistic Features {selectedText ? `for "${selectedText.title}"` : '(All Texts)'}</h3>
+              {linguisticFeatures.length === 0 ? (
+                <p>No linguistic features found{selectedText ? ' for this text' : ''}.</p>
+              ) : (
+                <div style={{ display: 'grid', gap: '15px' }}>
+                  {linguisticFeatures.map((feature, index) => (
+                    <div key={feature.id} style={{
+                      padding: '15px',
+                      border: '1px solid #ddd',
+                      borderRadius: '8px',
+                      backgroundColor: 'white'
+                    }}>
+                      <div style={{ marginBottom: '10px' }}>
+                        <strong style={{ color: '#007bff', fontSize: '16px' }}>
+                          {feature.halunder_term}
+                        </strong>
+                        {feature.german_equivalent && (
+                          <span style={{ marginLeft: '15px', color: '#28a745', fontSize: '14px' }}>
+                            → {feature.german_equivalent}
+                          </span>
+                        )}
+                      </div>
+                      <p style={{ margin: '10px 0', fontStyle: 'italic', color: '#555' }}>
+                        {feature.explanation}
+                      </p>
+                      <div style={{ fontSize: '12px', color: '#666' }}>
+                        Type: {feature.feature_type || 'other'}
+                        {!selectedText && feature.source_text_title && (
+                          <span style={{ marginLeft: '10px' }}>
+                            | From: {feature.source_text_title}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Vocabulary Tab */}
+          {activeTab === 'vocabulary' && (
+            <div>
+              <h3>Vocabulary Frequency (Top 100)</h3>
+              {vocabulary.length === 0 ? (
+                <p>No vocabulary data found.</p>
+              ) : (
+                <div style={{ display: 'grid', gap: '10px' }}>
+                  {vocabulary.map((word, index) => (
+                    <div key={word.id} style={{
+                      padding: '10px 15px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      backgroundColor: 'white',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div>
+                        <strong style={{ color: '#007bff' }}>{word.halunder_word}</strong>
+                        {word.german_translation && (
+                          <span style={{ marginLeft: '15px', color: '#28a745' }}>
+                            → {word.german_translation}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ 
+                        backgroundColor: '#e9ecef', 
+                        padding: '4px 8px', 
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        fontWeight: 'bold'
+                      }}>
+                        {word.frequency_count}x
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
