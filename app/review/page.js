@@ -556,6 +556,8 @@ export default function TextReview() {
 3. Include ALL Halunder sentences (even without German parallels)
 4. Process ALL text sections: titles, editorial notes, translation aids, main text
 5. For multiple valid translations, create separate sentence pair entries
+6. If full sentences are included in editorial notes or elsewhere also include them in the parallel corpus "sentencePairs"
+7. Make sure to read the editorial notes and translation aids in order to understand the context better and try to understand what the halunder sentences mean. Halunder is a north-frisian language you don't know.
 
 **TEXT METADATA**:
 Title: ${textFields.title || 'N/A'}
