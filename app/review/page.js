@@ -12,9 +12,9 @@ export default function TextReview() {
   const [searchTerm, setSearchTerm] = useState('')
   const [bucketCounts, setBucketCounts] = useState({})
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-  const [refreshingCounts, setRefreshingCounts] = useState(false)
   
-  // Auto-refresh tracking
+  // Smart refresh - only show loading when user-initiated
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false)
   const [lastRefresh, setLastRefresh] = useState(Date.now())
   const [isVisible, setIsVisible] = useState(true)
   
@@ -92,8 +92,8 @@ export default function TextReview() {
     const handleVisibilityChange = () => {
       setIsVisible(!document.hidden)
       if (!document.hidden) {
-        // Page became visible, refresh everything
-        refreshAllData()
+        // Page became visible, do a background refresh
+        backgroundRefreshAllData()
       }
     }
 
@@ -103,30 +103,21 @@ export default function TextReview() {
 
   // Initial load
   useEffect(() => {
-    refreshAllData()
+    loadCustomBuckets()
+    loadTexts()
+    loadProcessedTexts()
+    loadBucketCounts()
   }, [selectedBucket])
 
-  // Periodic refresh every 10 seconds when page is visible
+  // Background refresh every 30 seconds when page is visible (much less aggressive)
   useEffect(() => {
     if (!isVisible) return
 
     const interval = setInterval(() => {
-      refreshAllData()
-    }, 10000) // 10 seconds
+      backgroundRefreshCriticalData()
+    }, 30000) // 30 seconds instead of 10
 
     return () => clearInterval(interval)
-  }, [isVisible, selectedBucket])
-
-  // Fast refresh every 3 seconds for critical data
-  useEffect(() => {
-    if (!isVisible) return
-
-    const fastInterval = setInterval(() => {
-      loadBucketCounts()
-      loadProcessedTexts()
-    }, 3000) // 3 seconds
-
-    return () => clearInterval(fastInterval)
   }, [isVisible])
 
   useEffect(() => {
@@ -175,8 +166,38 @@ export default function TextReview() {
     }
   }, [currentText])
 
-  // Comprehensive refresh function
-  const refreshAllData = async () => {
+  // Background refresh functions (no loading states)
+  const backgroundRefreshAllData = async () => {
+    setBackgroundRefreshing(true)
+    try {
+      await Promise.all([
+        loadCustomBuckets(true),
+        loadBucketCounts(true),
+        loadTexts(true),
+        loadProcessedTexts(true)
+      ])
+      setLastRefresh(Date.now())
+    } catch (err) {
+      console.error('Background refresh failed:', err)
+    } finally {
+      setBackgroundRefreshing(false)
+    }
+  }
+
+  const backgroundRefreshCriticalData = async () => {
+    try {
+      await Promise.all([
+        loadBucketCounts(true),
+        loadProcessedTexts(true)
+      ])
+      setLastRefresh(Date.now())
+    } catch (err) {
+      console.error('Background refresh failed:', err)
+    }
+  }
+
+  // Manual refresh function (shows loading states)
+  const manualRefreshAllData = async () => {
     try {
       await Promise.all([
         loadCustomBuckets(),
@@ -198,7 +219,7 @@ export default function TextReview() {
   }
 
   // Load custom buckets from database
-  const loadCustomBuckets = async () => {
+  const loadCustomBuckets = async (background = false) => {
     try {
       const response = await fetchWithCacheBust('/api/custom-buckets')
       const result = await response.json()
@@ -242,7 +263,7 @@ export default function TextReview() {
       }
       
       // Immediate refresh
-      await refreshAllData()
+      await manualRefreshAllData()
       
       setNewBucketName('')
       setNewBucketColor('#6c757d')
@@ -273,7 +294,7 @@ export default function TextReview() {
         }
         
         // Immediate refresh
-        await refreshAllData()
+        await manualRefreshAllData()
         
         // Switch to pending bucket if deleting current bucket
         if (selectedBucket === bucketKey) {
@@ -320,26 +341,25 @@ export default function TextReview() {
     }
   }
 
-  const loadBucketCounts = async () => {
-    setRefreshingCounts(true)
+  const loadBucketCounts = async (background = false) => {
     try {
       const response = await fetchWithCacheBust('/api/bucket-counts')
       const result = await response.json()
       
       if (response.ok) {
         setBucketCounts(result.counts)
-        console.log('Bucket counts updated:', result.counts)
+        if (!background) {
+          console.log('Bucket counts updated:', result.counts)
+        }
       } else {
         console.error('Failed to load bucket counts:', result.error)
       }
     } catch (err) {
       console.error('Failed to load bucket counts:', err)
-    } finally {
-      setRefreshingCounts(false)
     }
   }
 
-  const loadProcessedTexts = async () => {
+  const loadProcessedTexts = async (background = false) => {
     try {
       const response = await fetchWithCacheBust('/api/corpus-texts')
       const result = await response.json()
@@ -347,15 +367,19 @@ export default function TextReview() {
       if (response.ok) {
         const processedIds = new Set(result.texts.map(text => text.id))
         setProcessedTextIds(processedIds)
-        console.log('Processed texts updated:', processedIds.size, 'texts')
+        if (!background) {
+          console.log('Processed texts updated:', processedIds.size, 'texts')
+        }
       }
     } catch (err) {
       console.error('Failed to load processed texts:', err)
     }
   }
 
-  const loadTexts = async () => {
-    setLoading(true)
+  const loadTexts = async (background = false) => {
+    if (!background) {
+      setLoading(true)
+    }
     setError('')
     
     try {
@@ -381,7 +405,9 @@ export default function TextReview() {
     } catch (err) {
       setError(err.message)
     } finally {
-      setLoading(false)
+      if (!background) {
+        setLoading(false)
+      }
     }
   }
 
@@ -458,8 +484,8 @@ export default function TextReview() {
         throw new Error(result.error || 'Failed to move text')
       }
 
-      // Immediate comprehensive refresh
-      await refreshAllData()
+      // Immediate refresh after move
+      await manualRefreshAllData()
       
     } catch (err) {
       setError(err.message)
@@ -500,9 +526,6 @@ export default function TextReview() {
 
       setHasUnsavedChanges(false)
       console.log('Save successful')
-      
-      // Refresh after save
-      await refreshAllData()
       
     } catch (err) {
       console.error('Save error:', err)
@@ -657,10 +680,10 @@ Please provide your response as JSON in this exact format:
       setJsonInput('')
       setShowSentenceProcessor(false)
       
-      // Immediate comprehensive refresh after processing
+      // Immediate refresh after processing
       await Promise.all([
         loadProcessedSentences(currentText.id),
-        refreshAllData()
+        loadProcessedTexts()
       ])
 
     } catch (err) {
@@ -685,7 +708,7 @@ Please provide your response as JSON in this exact format:
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={{ margin: '0' }}>Text Review</h2>
             <button
-              onClick={refreshAllData}
+              onClick={manualRefreshAllData}
               style={{
                 padding: '4px 8px',
                 backgroundColor: '#28a745',
@@ -694,12 +717,12 @@ Please provide your response as JSON in this exact format:
                 borderRadius: '4px',
                 cursor: 'pointer',
                 fontSize: '12px',
-                opacity: refreshingCounts ? 0.6 : 1
+                opacity: backgroundRefreshing ? 0.6 : 1
               }}
-              disabled={refreshingCounts}
-              title="Refresh all data"
+              disabled={backgroundRefreshing}
+              title="Manual refresh"
             >
-              {refreshingCounts ? '⟳' : '↻'}
+              {backgroundRefreshing ? '⟳' : '↻'}
             </button>
           </div>
           <div style={{ marginTop: '10px' }}>
@@ -850,11 +873,10 @@ Please provide your response as JSON in this exact format:
                   color: selectedBucket === key ? 'white' : '#333',
                   cursor: 'pointer',
                   fontSize: '14px',
-                  textAlign: 'left',
-                  opacity: refreshingCounts ? 0.7 : 1
+                  textAlign: 'left'
                 }}
               >
-                {bucket.label} ({refreshingCounts ? '...' : (bucketCounts[key] || 0)})
+                {bucket.label} ({bucketCounts[key] || 0})
               </button>
               
               {/* Delete button for custom buckets */}
@@ -907,7 +929,7 @@ Please provide your response as JSON in this exact format:
             }}
           />
           <button
-            onClick={loadTexts}
+            onClick={() => loadTexts()}
             style={{
               width: '100%',
               marginTop: '8px',
@@ -990,7 +1012,7 @@ Please provide your response as JSON in this exact format:
         </div>
       </div>
 
-      {/* Main Content - Rest of the component continues with all existing functionality */}
+      {/* Main Content */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         
         {/* Top Bar with Actions */}
@@ -1105,24 +1127,391 @@ Please provide your response as JSON in this exact format:
           </div>
         )}
 
-        {/* Rest of the component continues with all existing functionality... */}
-        {/* I'll keep this shorter since the pattern is established */}
-        
+        {/* Sentence Processor Panel */}
+        {showSentenceProcessor && (
+          <div style={{
+            padding: '20px',
+            backgroundColor: '#f8f9fa',
+            borderBottom: '1px solid #ddd'
+          }}>
+            <h3 style={{ margin: '0 0 15px 0' }}>Paste JSON Response from LLM</h3>
+            <textarea
+              value={jsonInput}
+              onChange={(e) => setJsonInput(e.target.value)}
+              style={{
+                width: '100%',
+                height: '150px',
+                padding: '10px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                fontFamily: 'monospace',
+                fontSize: '14px'
+              }}
+              placeholder="Paste the JSON response from Claude here..."
+            />
+            <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
+              <button
+                onClick={processSentenceJson}
+                disabled={sentenceProcessing || !jsonInput.trim()}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: sentenceProcessing ? '#ccc' : '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: sentenceProcessing ? 'not-allowed' : 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                {sentenceProcessing ? 'Processing...' : 'Process JSON'}
+              </button>
+              <button
+                onClick={() => setJsonInput('')}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Processed Sentences Display */}
+        {showProcessedSentences && currentText && (
+          <div style={{
+            padding: '20px',
+            backgroundColor: '#f0f8ff',
+            borderBottom: '1px solid #ddd',
+            maxHeight: '400px',
+            overflow: 'auto'
+          }}>
+            <h3 style={{ margin: '0 0 15px 0' }}>
+              Processed Sentences for "{textFields.title || 'Untitled'}"
+            </h3>
+            
+            {sentencesLoading ? (
+              <div style={{ textAlign: 'center', padding: '20px' }}>Loading processed sentences...</div>
+            ) : parallelSentences.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                No processed sentences found. Use the "Process Sentences" button above to generate them.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gap: '15px' }}>
+                {parallelSentences.map((sentence, index) => (
+                  <div key={sentence.id} style={{
+                    padding: '15px',
+                    border: '1px solid #ccc',
+                    borderRadius: '8px',
+                    backgroundColor: 'white'
+                  }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                      <div>
+                        <strong style={{ color: '#007bff' }}>Halunder:</strong>
+                        <p style={{ margin: '5px 0', fontFamily: 'Georgia, serif', fontSize: '14px' }}>
+                          {sentence.halunder_sentence}
+                        </p>
+                      </div>
+                      <div>
+                        <strong style={{ color: '#28a745' }}>German:</strong>
+                        <p style={{ margin: '5px 0', fontFamily: 'Georgia, serif', fontSize: '14px' }}>
+                          {sentence.german_sentence}
+                        </p>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: '10px', fontSize: '12px', color: '#666', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Order: {sentence.sentence_order} | Type: {sentence.source_type}</span>
+                      {sentence.confidence_score && <span>Confidence: {sentence.confidence_score}</span>}
+                    </div>
+                  </div>
+                ))}
+                
+                {linguisticFeatures.length > 0 && (
+                  <div style={{ marginTop: '20px' }}>
+                    <h4 style={{ margin: '0 0 10px 0', color: '#6f42c1' }}>Linguistic Features ({linguisticFeatures.length})</h4>
+                    <div style={{ display: 'grid', gap: '10px' }}>
+                      {linguisticFeatures.map((feature, index) => (
+                        <div key={feature.id} style={{
+                          padding: '10px',
+                          border: '1px solid #ddd',
+                          borderRadius: '6px',
+                          backgroundColor: '#fafafa',
+                          fontSize: '13px'
+                        }}>
+                          <div style={{ marginBottom: '5px' }}>
+                            <strong style={{ color: '#007bff' }}>{feature.halunder_term}</strong>
+                            {feature.german_equivalent && (
+                              <span style={{ marginLeft: '10px', color: '#28a745' }}>
+                                → {feature.german_equivalent}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontStyle: 'italic', color: '#555' }}>
+                            {feature.explanation}
+                          </div>
+                          {feature.feature_type && (
+                            <div style={{ marginTop: '5px', fontSize: '11px', color: '#888' }}>
+                              Type: {feature.feature_type}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Main editing area */}
         <div style={{ flex: 1, padding: '20px', overflow: 'auto' }}>
+          
           {!currentText ? (
             <div style={{ textAlign: 'center', padding: '50px', color: '#666' }}>
               <h3>Select a text to review</h3>
               <p>Choose a text from the sidebar to start reviewing.</p>
               <p style={{ fontSize: '12px', marginTop: '20px' }}>
                 💡 <strong>Tip:</strong> Drag texts between buckets to organize them quickly!<br/>
-                Data refreshes automatically every 10 seconds.
+                Data refreshes automatically every 30 seconds in the background.
               </p>
             </div>
           ) : (
-            <div>
-              <p>Current text: {textFields.title}</p>
-              {/* Add your full editing interface here */}
-            </div>
+            <>
+              {/* Text Metadata */}
+              <div style={{ marginBottom: '30px' }}>
+                <h3 style={{ marginBottom: '15px', color: '#333' }}>Text Metadata</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '15px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Title:</label>
+                    <input
+                      type="text"
+                      value={textFields.title}
+                      onChange={(e) => updateTextField('title', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Subtitle:</label>
+                    <input
+                      type="text"
+                      value={textFields.subtitle}
+                      onChange={(e) => updateTextField('subtitle', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Author:</label>
+                    <input
+                      type="text"
+                      value={textFields.author}
+                      onChange={(e) => updateTextField('author', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Translator:</label>
+                    <input
+                      type="text"
+                      value={textFields.translator}
+                      onChange={(e) => updateTextField('translator', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Editor/Corrector:</label>
+                    <input
+                      type="text"
+                      value={textFields.editor_corrector}
+                      onChange={(e) => updateTextField('editor_corrector', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Text Quality:</label>
+                    <select
+                      value={textFields.text_quality}
+                      onChange={(e) => updateTextField('text_quality', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    >
+                      <option value="">Select quality...</option>
+                      <option value="professional">Professional</option>
+                      <option value="colloquial">Colloquial</option>
+                      <option value="scholarly">Scholarly</option>
+                      <option value="literary">Literary</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Document Metadata */}
+              <div style={{ marginBottom: '30px' }}>
+                <h3 style={{ marginBottom: '15px', color: '#333' }}>Document Information</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Publication:</label>
+                    <input
+                      type="text"
+                      value={documentFields.publication}
+                      onChange={(e) => updateDocumentField('publication', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Year:</label>
+                    <input
+                      type="number"
+                      value={documentFields.year}
+                      onChange={(e) => updateDocumentField('year', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Edition:</label>
+                    <input
+                      type="text"
+                      value={documentFields.edition}
+                      onChange={(e) => updateDocumentField('edition', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Page Numbers:</label>
+                    <input
+                      type="text"
+                      value={documentFields.page_numbers}
+                      onChange={(e) => updateDocumentField('page_numbers', e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Main text fields */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                <div>
+                  <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '10px' }}>
+                    Halunder Text:
+                  </label>
+                  <textarea
+                    value={textFields.complete_helgolandic_text}
+                    onChange={(e) => updateTextField('complete_helgolandic_text', e.target.value)}
+                    style={{
+                      width: '100%',
+                      height: '400px',
+                      padding: '15px',
+                      border: '1px solid #ccc',
+                      borderRadius: '4px',
+                      fontFamily: 'monospace',
+                      fontSize: '14px',
+                      resize: 'vertical'
+                    }}
+                    placeholder="Enter Halunder text here..."
+                  />
+                </div>
+                
+                <div>
+                  <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '10px' }}>
+                    German Translation:
+                  </label>
+                  <textarea
+                    value={textFields.german_translation_text}
+                    onChange={(e) => updateTextField('german_translation_text', e.target.value)}
+                    style={{
+                      width: '100%',
+                      height: '400px',
+                      padding: '15px',
+                      border: '1px solid #ccc',
+                      borderRadius: '4px',
+                      fontFamily: 'monospace',
+                      fontSize: '14px',
+                      resize: 'vertical'
+                    }}
+                    placeholder="Enter German translation here..."
+                  />
+                </div>
+              </div>
+
+              {/* Editorial Introduction */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '10px' }}>
+                  Editorial Introduction:
+                </label>
+                <textarea
+                  value={textFields.editorial_introduction}
+                  onChange={(e) => updateTextField('editorial_introduction', e.target.value)}
+                  style={{
+                    width: '100%',
+                    height: '120px',
+                    padding: '15px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    resize: 'vertical'
+                  }}
+                  placeholder="Editorial introduction or context..."
+                />
+              </div>
+
+              {/* Translation Aids */}
+              {translationAids.length > 0 && (
+                <div style={{ marginBottom: '20px' }}>
+                  <h3 style={{ marginBottom: '15px', color: '#333' }}>Translation Aids</h3>
+                  <div style={{ display: 'grid', gap: '10px' }}>
+                    {translationAids.map((aid, index) => (
+                      <div
+                        key={aid.id}
+                        style={{
+                          padding: '15px',
+                          border: '1px solid #ddd',
+                          borderRadius: '8px',
+                          backgroundColor: '#f9f9f9'
+                        }}
+                      >
+                        <div style={{ fontWeight: 'bold', color: '#007bff', marginBottom: '5px' }}>
+                          {aid.number} {aid.term}
+                        </div>
+                        <div style={{ color: '#555' }}>
+                          {aid.explanation}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Move to Bucket Buttons */}
+              <div style={{ marginTop: '30px', padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                <h3 style={{ marginBottom: '15px', color: '#333' }}>Move to Bucket</h3>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {Object.entries(allBuckets).map(([key, bucket]) => {
+                    if (key === selectedBucket) return null
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => moveTextToBucket(key)}
+                        style={{
+                          padding: '10px 15px',
+                          backgroundColor: bucket.color,
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '14px'
+                        }}
+                      >
+                        Move to {bucket.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </>
           )}
         </div>
       </div>
