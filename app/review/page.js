@@ -701,7 +701,7 @@ Before finalizing, ensure:
 - This data will train a neural model - consistency is critical!
 - Invalid JSON will break the training pipeline
 - Character normalization ensures consistent model input
-- Use ONLY the six allowed type categories
+- Use ONLY the six allowed type categories.
 - Multiple translations go in sentencePairs as separate entries, not in a special section`
 
     try {
