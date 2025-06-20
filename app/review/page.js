@@ -474,13 +474,13 @@ export default function TextReview() {
   }
 
   const copyJsonPrompt = () => {
-    if (!currentText) return
+  if (!currentText) return
 
-    const translationAidsText = translationAids
-      .map(aid => `${aid.number} ${aid.term}: ${aid.explanation}`)
-      .join('\n')
+  const translationAidsText = translationAids
+    .map(aid => `${aid.number} ${aid.term}: ${aid.explanation}`)
+    .join('\n')
 
-    const prompt = `Please analyze this Halunder text and create parallel sentence pairs. Extract all sentence pairs between Halunder and German, identify additional Halunder-only sentences, and note linguistic features like idioms, cultural terms, and etymological information.
+  const prompt = `Please analyze this Halunder text and create parallel sentence pairs. Extract all sentence pairs between Halunder and German, identify additional Halunder-only sentences, and note linguistic features like idioms, cultural terms, and etymological information.
 
 Text Information: Title: ${textFields.title || 'N/A'} Author: ${textFields.author || 'N/A'} Translator: ${textFields.translator || 'N/A'} Source: ${documentFields.publication || 'N/A'} (${documentFields.year || 'N/A'})
 
@@ -500,6 +500,10 @@ Include ALL Halunder sentences, even if they don't have direct German parallels
 
 Process ALL sections of the text (titles, editorial notes, translation aids, main text)
 
+Match German sentence punctuation and capitalization to the Halunder sentence exactly (if Halunder starts with capital letter, German should too; if Halunder ends with "!" or ".", German should match)
+
+Replace any German quotation marks („") with regular ASCII quotation marks ("") for JSON compatibility
+
 Correct 100% obvious OCR errors
 
 Mark any untranslatable or culturally specific terms with detailed explanations
@@ -508,11 +512,32 @@ Include etymology or cultural context where relevant (especially for unique Halu
 
 Identify idiomatic expressions and provide both literal and figurative meanings
 
-If persons or places are mentioned and additional information about them exists, add them to the linguistic features.
+If persons or places are mentioned and additional information about them exists, add them to the linguistic features
 
 Include pedagogical notes that would help language learners (common confusions, false friends, pronunciation guides)
 
 If multiple translation interpretations exist as indicated by the text, provide separate entries for each alternative
+
+Don't over-elaborate - only write down information you are certain about, don't make up meanings unless specified by the text or editorial content
+
+For linguistic features, write hover-tooltip style explanations in German for a digital translation tool. These should provide quick, precise information about Halunder words, phrases, idioms, names, places and cultural terms. Structure as follows:
+* Begin with etymological information (origin, language family, development)
+* Explain semantic changes briefly and factually
+* Add cultural/ritual contexts when relevant
+* Use concrete examples from the text (phrases, expressions)
+* Avoid interpretative or judgmental statements
+* Keep tone factual and informative
+* All explanations in German
+* Focus on the word/phrase/idiom itself, not its use in the specific text context
+* For compounds: explain the word parts
+* For loanwords: name the source language
+* For cultural terms: brief factual info without interpretation
+* For names and places: geographical/historical classification
+* For buildings, restaurants, families: relevant background information
+* For idioms and expressions: literal and figurative meaning
+* Include single words up to multi-word expressions
+* Perfect for quick understanding when hovering with mouse
+* Feel free to include comparisons to English (e.g. "Al" ("schon" auf Helgoländisch) - compare with English: "already")
 
 Type categories: idiom, phrase, cultural, etymology, grammar, other
 
@@ -541,28 +566,28 @@ Please provide your response as JSON in this exact format:
     {
       "halunder_term": "specific word or phrase",
       "german_equivalent": "German translation",
-      "explanation": "Detailed explanation including etymology/cultural context/pedagogical notes",
+      "explanation": "Detailed German explanation including etymology/cultural context/pedagogical notes following the hover-tooltip style guidelines above",
       "type": "idiom"
     }
   ]
 }
 \`\`\``
 
-    try {
-      navigator.clipboard.writeText(prompt)
-      alert('JSON prompt copied to clipboard!')
-    } catch (err) {
-      console.error('Failed to copy to clipboard:', err)
-      // Fallback
-      const textarea = document.createElement('textarea')
-      textarea.value = prompt
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
-      alert('JSON prompt copied to clipboard!')
-    }
+  try {
+    navigator.clipboard.writeText(prompt)
+    alert('JSON prompt copied to clipboard!')
+  } catch (err) {
+    console.error('Failed to copy to clipboard:', err)
+    // Fallback
+    const textarea = document.createElement('textarea')
+    textarea.value = prompt
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+    alert('JSON prompt copied to clipboard!')
   }
+}
 
   const processSentenceJson = async () => {
     if (!currentText || !jsonInput.trim()) {
