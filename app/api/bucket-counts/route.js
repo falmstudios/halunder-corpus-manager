@@ -7,27 +7,21 @@ const supabase = createClient(
 
 export async function GET(request) {
   try {
-    // Get all texts with their review_status
+    console.log('Fetching bucket counts...')
+    
+    // Get all texts with their review_status (the column might be called processing_status)
     const { data: texts, error: textsError } = await supabase
       .from('texts')
-      .select('review_status')
+      .select('review_status, processing_status') // Try both possible column names
     
     if (textsError) {
       console.error('Database error:', textsError)
       return Response.json({ error: textsError.message }, { status: 500 })
     }
     
-    // Get all custom buckets
-    const { data: customBuckets, error: bucketsError } = await supabase
-      .from('custom_buckets')
-      .select('bucket_key')
+    console.log('Found texts:', texts?.length || 0)
     
-    if (bucketsError) {
-      console.error('Custom buckets error:', bucketsError)
-      return Response.json({ error: bucketsError.message }, { status: 500 })
-    }
-    
-    // Initialize counts for default buckets
+    // Initialize counts
     const counts = {
       pending: 0,
       parallel_confirmed: 0,
@@ -36,24 +30,18 @@ export async function GET(request) {
       deleted: 0
     }
     
-    // Initialize counts for custom buckets
-    customBuckets.forEach(bucket => {
-      counts[bucket.bucket_key] = 0
-    })
-    
-    // Count all texts including those with null review_status (treat as pending)
+    // Count texts - use either review_status or processing_status
     texts.forEach(text => {
-      const status = text.review_status || 'pending'
+      const status = text.review_status || text.processing_status || 'pending'
       if (counts.hasOwnProperty(status)) {
         counts[status]++
       } else {
-        // Handle case where text has a status that's not in our buckets
-        // This could happen if a custom bucket was deleted but texts still reference it
-        console.warn(`Found text with unknown status: ${status}`)
+        // If it's not a recognized status, count as pending
+        counts.pending++
       }
     })
     
-    console.log('Bucket counts:', counts) // Debug log
+    console.log('Calculated counts:', counts)
     
     return Response.json({ counts })
     
