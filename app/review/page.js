@@ -583,27 +583,55 @@ ${cleanEditorialIntroduction || 'N/A'}
 ${translationAidsText || 'N/A'}
 [TRANSLATION AIDS END]
 
-**LINGUISTIC ANNOTATION GUIDELINES** (For hover-tooltip style digital tool):
+*LINGUISTIC ANNOTATION GUIDELINES (For hover-tooltip style digital tool)*:
+Extract linguistic annotations ONLY for particularly notable features (maximum 40 per text):
 
-Create concise, factual explanations in German for:
-- Single words to multi-word expressions
-- Etymology: Origin, language family, development path
-- Compounds: Explain component parts
-- Loanwords: Identify source language
-- Cultural terms: Brief factual context
-- Names/Places: Geographic/historical classification
-- Buildings/Institutions: Relevant background
-- Idioms: Both literal and figurative meanings
-- Grammatical peculiarities specific to Halunder
-- Comparisons to English where helpful (e.g., "Al" = "schon", cf. English "already")
+Unique cultural terms specific to Helgoland (customs, places, institutions)
+Idioms and expressions with non-literal meanings explained
+Words with interesting etymologies worth highlighting
+Grammatical features unique to Halunder that would help a translator
+Terms whose usage or meaning is explained in the editorial introduction or translation aids
+Words requiring cultural context to understand properly
+Names of relevant people and their background
+Names of places that were present in the past (e.g. giving context on a certain restaurant where you have the name)
 
-**ALLOWED TYPES** (use ONLY these):
-- "idiom": Idiomatic expressions with non-literal meanings
-- "phrase": Multi-word expressions or collocations
-- "cultural": Culture-specific terms, customs, places, institutions
-- "etymology": Word origins and historical development
-- "grammar": Grammatical features unique to Halunder
-- "other": Any linguistic feature not fitting above categories
+For each selected term, idiom or phrase (single word to sentence parts), provide concise German explanations covering relevant aspects:
+
+Etymology: Origin and development (if notable)
+Literal vs. figurative meaning (for idioms)
+Cultural/historical context (where needed)
+Grammatical peculiarities (if applicable)
+Comparisons to English where helpful (e.g., halunder "Al" = german "schon", but comparable to English "already")
+
+ALLOWED TYPES (use ONLY these):
+
+"idiom": Idiomatic expressions with non-literal meanings
+"phrase": Multi-word expressions or collocations
+"cultural": Culture-specific terms, customs, places, institutions
+"etymology": Word origins and historical development
+"grammar": Grammatical features unique to Halunder
+"other": Any linguistic feature not fitting above categories
+
+Prioritize terms that would genuinely help someone understand the cultural and linguistic uniqueness of Halunder, not common Germanic cognates or straightforward vocabulary differences.
+
+For each selected term, provide concise German explanations covering relevant aspects:
+
+Etymology: Origin and development (if notable)
+Literal vs. figurative meaning (for idioms)
+Cultural/historical context (where needed)
+Grammatical peculiarities (if applicable)
+Comparisons to English where helpful (e.g., "Al" = "schon", cf. English "already")
+
+ALLOWED TYPES (use ONLY these):
+
+"idiom": Idiomatic expressions with non-literal meanings
+"phrase": Multi-word expressions or collocations
+"cultural": Culture-specific terms, customs, places, institutions
+"etymology": Word origins and historical development
+"grammar": Grammatical features unique to Halunder
+"other": Any linguistic feature not fitting above categories
+
+Prioritize terms that would genuinely help someone understand the cultural and linguistic uniqueness of Halunder, not common Germanic cognates or straightforward vocabulary differences.
 
 **JSON SAFETY RULES**:
 - Use ONLY straight double quotes (") for JSON strings
