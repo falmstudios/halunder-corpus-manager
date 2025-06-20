@@ -498,13 +498,13 @@ export default function TextReview() {
   }
 
   const copyJsonPrompt = () => {
-    if (!currentText) return
+  if (!currentText) return
 
-    const translationAidsText = translationAids
-      .map(aid => `${aid.number} ${aid.term}: ${aid.explanation}`)
-      .join('\n')
+  const translationAidsText = translationAids
+    .map(aid => `${aid.number} ${aid.term}: ${aid.explanation}`)
+    .join('\n')
 
-    const prompt = `Please analyze this Halunder text and create parallel sentence pairs. 
+  const prompt = `Please analyze this Halunder text and create parallel sentence pairs. 
 
 **CRITICAL SENTENCE ALIGNMENT RULES:**
 - A single sentence may span multiple lines in poetry - combine them into ONE sentence pair
@@ -512,17 +512,28 @@ export default function TextReview() {
 - Align based on semantic meaning, not line-by-line
 - Each sentence pair should represent one complete thought/statement
 - For poetry: if multiple lines form one sentence, combine them with spaces
+- EVERY German sentence should have a corresponding Halunder sentence - do not leave any untranslated
+- If German text is incomplete, match it with the best corresponding Halunder segment
 
-**Example:**
-If Halunder text shows:
+**CRITICAL JSON FORMAT RULES:**
+- Use ONLY straight double quotes (") - never curly quotes (" ")
+- Ensure valid JSON syntax
+- Test your JSON before responding
+
+**Example of proper alignment:**
+If Halunder shows multiple lines:
 "Äpp bae Willem - ammen (?) tau! -
-Willem Teil"
+Willem Teil
+Min ick no nons fann verhaale well"
 
 And German shows:
 "Hinauf zu Wilhelm um zwei Grogs.
-Wilhelm Teil"
+Wilhelm Teil
+Mir ist noch nicht nach erzählen."
 
-Create ONE sentence pair: "Äpp bae Willem - ammen (?) tau! - Willem Teil" → "Hinauf zu Wilhelm um zwei Grogs. Wilhelm Teil"
+Create sentence pairs based on meaning:
+1. "Äpp bae Willem - ammen (?) tau! - Willem Teil" → "Hinauf zu Wilhelm um zwei Grogs. Wilhelm Teil"
+2. "Min ick no nons fann verhaale well" → "Mir ist noch nicht nach erzählen."
 
 **Text Information:**
 Title: ${textFields.title || 'N/A'}
@@ -545,13 +556,21 @@ ${translationAidsText || 'N/A'}
 **INSTRUCTIONS:**
 
 **For Sentence Alignment:**
+- Look at BOTH texts completely and match every segment
 - Combine lines that form complete sentences - do NOT split at line breaks
 - Look for actual sentence punctuation (. ! ?) to determine sentence boundaries
 - For poetry: "Line 1 text\\nLine 2 continuation." = ONE sentence pair
 - Match complete semantic units, not individual lines
 - Join multiple lines with single spaces when they form one sentence
+- ENSURE every German segment has a Halunder match and vice versa
+- If segments don't align perfectly, group them logically by meaning
 
-**Output Format:**
+**For Linguistic Features:**
+- Extract ALL unique Halunder words and phrases that need explanation
+- Focus on cultural terms, etymology, idioms, and grammatical features
+- Provide detailed German explanations suitable for language learners
+
+**Output Format (USE STRAIGHT QUOTES ONLY):**
 {
   "sentencePairs": [
     {
@@ -572,22 +591,24 @@ ${translationAidsText || 'N/A'}
       "type": "etymology|idiom|cultural|grammatical|other"
     }
   ]
-}`
+}
 
-    try {
-      navigator.clipboard.writeText(prompt)
-      alert('Enhanced JSON prompt copied to clipboard!')
-    } catch (err) {
-      console.error('Failed to copy to clipboard:', err)
-      const textarea = document.createElement('textarea')
-      textarea.value = prompt
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
-      alert('Enhanced JSON prompt copied to clipboard!')
-    }
+**REMINDER: Use only straight double quotes (") in your JSON response, never curly quotes (" "). Ensure every German text segment is matched with corresponding Halunder text if available in the fields.**`
+
+  try {
+    navigator.clipboard.writeText(prompt)
+    alert('Enhanced JSON prompt copied to clipboard!')
+  } catch (err) {
+    console.error('Failed to copy to clipboard:', err)
+    const textarea = document.createElement('textarea')
+    textarea.value = prompt
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+    alert('Enhanced JSON prompt copied to clipboard!')
   }
+}
 
   const processSentenceJson = async () => {
     if (!currentText || !jsonInput.trim()) {
