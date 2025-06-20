@@ -102,15 +102,15 @@ export default function TextReview() {
     loadBucketCounts()
   }, [selectedBucket])
 
-  // Set up periodic refresh of bucket counts every 10 seconds (reduced from 30)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      loadBucketCounts(true) // true = silent refresh
-      loadProcessedTexts(true) // true = silent refresh
-    }, 10000)
+  // Set up periodic refresh of bucket counts every 5 seconds instead of 10
+useEffect(() => {
+  const interval = setInterval(() => {
+    loadBucketCounts(true) // true = silent refresh
+    loadProcessedTexts(true) // true = silent refresh
+  }, 5000) // Reduced from 10000 to 5000
 
-    return () => clearInterval(interval)
-  }, [])
+  return () => clearInterval(interval)
+}, [])
 
   useEffect(() => {
     if (currentText) {
