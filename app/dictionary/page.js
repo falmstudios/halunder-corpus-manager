@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import DictionarySearch from './DictionarySearch'
 import DictionaryEntry from './DictionaryEntry'
 import AlphabetSidebar from './AlphabetSidebar'
+import AddEntryModal from './AddEntryModal'
 
 export default function DictionaryPage() {
   const [entries, setEntries] = useState([])
