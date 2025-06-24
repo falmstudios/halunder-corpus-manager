@@ -73,15 +73,23 @@ export default function DictionaryPage() {
   }, [loadEntries])
 
   const handleSelectEntry = async (entry) => {
+    console.log('Selecting entry:', entry.id)
     try {
       const response = await fetch(`/api/dictionary/entry?id=${entry.id}`)
       const data = await response.json()
       
-      if (response.ok) {
+      if (response.ok && data.entry) {
+        console.log('Loaded entry details:', data.entry)
         setSelectedEntry(data.entry)
+      } else {
+        console.error('Failed to load entry details:', data.error)
+        // Fall back to using the entry from the list
+        setSelectedEntry(entry)
       }
     } catch (error) {
       console.error('Failed to load entry details:', error)
+      // Fall back to using the entry from the list
+      setSelectedEntry(entry)
     }
   }
 
@@ -94,6 +102,11 @@ export default function DictionaryPage() {
   const handleLetterSelect = (letter) => {
     setSelectedLetter(letter)
     setSearchTerm('')
+  }
+
+  const handleEntryUpdate = (updatedEntry) => {
+    setSelectedEntry(updatedEntry)
+    loadEntries() // Refresh the list
   }
 
   return (
@@ -192,26 +205,20 @@ export default function DictionaryPage() {
                       }
                     }}
                   >
-                    <div style={{ fontWeight: 'bold', fontSize: '16px' }}>
-                      {entry.halunder_word}
-                      {entry.gender && entry.word_type === 'noun' && (
-                        <span style={{ 
-                          fontWeight: 'normal',
-                          color: '#666',
-                          fontSize: '14px',
-                          marginLeft: '8px'
-                        }}>
-                          , {getArticle(entry.gender)}
-                        </span>
-                      )}
+                    <div style={{ marginBottom: '4px' }}>
+                      <span style={{ fontWeight: 'bold', fontSize: '16px' }}>
+                        {entry.halunder_word}
+                      </span>
                       {entry.german_word && (
                         <span style={{ 
-                          fontWeight: 'normal', 
                           color: '#666',
                           fontSize: '14px',
                           marginLeft: '10px'
                         }}>
                           → {entry.german_word}
+                          {entry.gender && entry.word_type === 'noun' && (
+                            <span>, {getArticle(entry.gender)}</span>
+                          )}
                         </span>
                       )}
                     </div>
@@ -255,10 +262,7 @@ export default function DictionaryPage() {
               <DictionaryEntry 
                 key={selectedEntry.id}
                 entry={selectedEntry}
-                onUpdate={(updatedEntry) => {
-                  setSelectedEntry(updatedEntry)
-                  loadEntries()
-                }}
+                onUpdate={handleEntryUpdate}
               />
             ) : (
               <div style={{ 
