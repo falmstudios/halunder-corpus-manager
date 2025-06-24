@@ -109,7 +109,7 @@ export default function DictionaryPage() {
             </button>
             
             
-              href="/dictionary/import"
+            <a href="/dictionary/import"
               style={{
                 padding: '8px 16px',
                 backgroundColor: '#6c757d',
