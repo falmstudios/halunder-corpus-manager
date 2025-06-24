@@ -32,18 +32,26 @@ export async function POST(request) {
           continue
         }
         
-        // Insert main entry - handle different field names
+        // Combine all additional info fields
+        let additionalInfo = []
+        if (entry.additionalInfo) additionalInfo.push(entry.additionalInfo)
+        if (entry.usage) additionalInfo.push(`Gebrauch: ${entry.usage}`)
+        if (entry.idioms) additionalInfo.push(`Redewendungen: ${entry.idioms}`)
+        if (entry.references) additionalInfo.push(`Verweise: ${entry.references}`)
+        
+        // Insert main entry
         const { data: newEntry, error: entryError } = await supabase
           .from('dictionary_entries')
           .insert({
             halunder_word: entry.halunderWord,
-            german_word: entry.germanWord || entry.german_word,
+            german_word: entry.germanWord,
             pronunciation: entry.pronunciation,
-            word_type: entry.wordType || entry.word_type,
+            word_type: entry.wordType,
             gender: entry.gender,
-            plural_form: entry.pluralForm || entry.plural || entry.plural_form,
+            plural_form: entry.pluralForm || entry.plural,
+            plural_pronunciation: entry.pluralPronunciation,
             etymology: entry.etymology,
-            additional_info: entry.additionalInfo || entry.usage || entry.idioms || entry.references,
+            additional_info: additionalInfo.length > 0 ? additionalInfo.join('\n\n') : null,
             source: source
           })
           .select()
@@ -53,7 +61,6 @@ export async function POST(request) {
         
         // Handle verb details if present
         if (entry.wordType && entry.wordType.includes('verb')) {
-          // Extract verb class from wordType (e.g., "verb (weak)" -> "weak")
           const verbClassMatch = entry.wordType.match(/verb\s*\(([^)]+)\)/)
           if (verbClassMatch || entry.conjugationClass) {
             await supabase
@@ -66,7 +73,7 @@ export async function POST(request) {
           }
         }
         
-        // Handle meanings - your JSON has germanMeaning directly
+        // Insert meaning
         if (entry.germanMeaning) {
           const { data: meaning, error: meaningError } = await supabase
             .from('dictionary_meanings')
@@ -75,7 +82,8 @@ export async function POST(request) {
               meaning_number: 1,
               german_meaning: entry.germanMeaning,
               halunder_meaning: entry.halunderMeaning,
-              context: entry.context || entry.usage,
+              context: entry.context,
+              usage_notes: entry.usage,
               meaning_order: 0
             })
             .select()
@@ -83,7 +91,7 @@ export async function POST(request) {
           
           if (meaningError) throw meaningError
           
-          // Handle examples - they're directly on the entry in your JSON
+          // Handle examples
           if (entry.examples && Array.isArray(entry.examples)) {
             const examples = entry.examples.map((ex, index) => ({
               entry_id: newEntry.id,
@@ -102,41 +110,8 @@ export async function POST(request) {
           }
         }
         
-        // Handle alternative forms as references
-        if (entry.alternativeForms && Array.isArray(entry.alternativeForms)) {
-          for (const altForm of entry.alternativeForms) {
-            // First, check if the alternative form exists as an entry
-            const { data: altEntry } = await supabase
-              .from('dictionary_entries')
-              .select('id')
-              .eq('halunder_word', altForm.replace(/\s*\([^)]*\)\s*/g, '').trim())
-              .single()
-            
-            if (altEntry) {
-              await supabase
-                .from('dictionary_references')
-                .insert({
-                  entry_id: newEntry.id,
-                  referenced_entry_id: altEntry.id,
-                  reference_type: 'alternative_form',
-                  notes: 'Alternative form'
-                })
-            }
-          }
-        }
-        
-        // Handle compounds
-        if (entry.compounds && Array.isArray(entry.compounds)) {
-          const compounds = entry.compounds.map(comp => ({
-            base_entry_id: newEntry.id,
-            compound_word: comp.word || comp,
-            compound_meaning: comp.meaning || null
-          }))
-          
-          await supabase
-            .from('dictionary_compounds')
-            .insert(compounds)
-        }
+        // Store alternative forms in additional_info for now
+        // Since we don't have a specific table for them
         
         processed++
         
