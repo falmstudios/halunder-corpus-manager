@@ -9,9 +9,9 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url)
     const query = searchParams.get('q') || ''
-    const searchType = searchParams.get('type') || 'both' // halunder, german, both
-    const source = searchParams.get('source') // filter by source
-    const limit = parseInt(searchParams.get('limit')) || 50
+    const searchType = searchParams.get('type') || 'both'
+    const source = searchParams.get('source')
+    const limit = parseInt(searchParams.get('limit')) || 100
     
     let supabaseQuery = supabase
       .from('dictionary_entries')
@@ -22,7 +22,8 @@ export async function GET(request) {
           meaning_number,
           german_meaning,
           halunder_meaning,
-          context
+          context,
+          usage_notes
         ),
         dictionary_examples (
           id,
@@ -36,18 +37,28 @@ export async function GET(request) {
         )
       `)
     
-    // Search logic
-    if (query) {
+    // Handle letter search vs text search
+    if (query.length === 1 && /^[A-ZÄÖÜ]$/i.test(query)) {
+      // Single letter - filter by first letter
+      supabaseQuery = supabaseQuery.ilike('halunder_word', `${query}%`)
+    } else if (query) {
+      // Text search
       if (searchType === 'halunder') {
         supabaseQuery = supabaseQuery.ilike('halunder_word', `%${query}%`)
       } else if (searchType === 'german') {
-        supabaseQuery = supabaseQuery.or(`german_word.ilike.%${query}%,dictionary_meanings.german_meaning.ilike.%${query}%`)
+        // Search in german_word or in meanings
+        supabaseQuery = supabaseQuery.or(
+          `german_word.ilike.%${query}%,dictionary_meanings.german_meaning.ilike.%${query}%`
+        )
       } else {
-        supabaseQuery = supabaseQuery.or(`halunder_word.ilike.%${query}%,german_word.ilike.%${query}%`)
+        // Search both
+        supabaseQuery = supabaseQuery.or(
+          `halunder_word.ilike.%${query}%,german_word.ilike.%${query}%,dictionary_meanings.german_meaning.ilike.%${query}%`
+        )
       }
     }
     
-    if (source) {
+    if (source && source !== 'all') {
       supabaseQuery = supabaseQuery.eq('source', source)
     }
     
@@ -59,7 +70,7 @@ export async function GET(request) {
     
     if (error) throw error
     
-    return Response.json({ entries: data })
+    return Response.json({ entries: data || [] })
     
   } catch (error) {
     console.error('Dictionary search error:', error)
