@@ -1,51 +1,49 @@
+'use client'
+
 export default function AlphabetSidebar({ onLetterSelect, selectedLetter }) {
-  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜ'.split('')
   
   return (
     <div style={{
       width: '60px',
       backgroundColor: '#f8f9fa',
       borderRight: '1px solid #ddd',
-      padding: '10px',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center'
+      padding: '20px 0',
+      overflowY: 'auto'
     }}>
-      <h3 style={{ 
-        margin: '0 0 10px 0', 
-        fontSize: '14px',
-        writingMode: 'vertical-rl',
-        textOrientation: 'mixed'
-      }}>
-        A-Z
-      </h3>
+      <button
+        onClick={() => onLetterSelect(null)}
+        style={{
+          width: '40px',
+          height: '40px',
+          margin: '0 10px 5px',
+          border: '1px solid #ddd',
+          backgroundColor: !selectedLetter ? '#007bff' : '#fff',
+          color: !selectedLetter ? '#fff' : '#333',
+          borderRadius: '4px',
+          cursor: 'pointer',
+          fontSize: '12px',
+          fontWeight: 'bold'
+        }}
+      >
+        Alle
+      </button>
       
-      {letters.map(letter => (
+      {alphabet.map(letter => (
         <button
           key={letter}
-          onClick={() => onLetterSelect(letter.toLowerCase())}
+          onClick={() => onLetterSelect(letter)}
           style={{
             width: '40px',
-            height: '30px',
-            margin: '2px 0',
-            backgroundColor: selectedLetter === letter.toLowerCase() ? '#007bff' : 'transparent',
-            color: selectedLetter === letter.toLowerCase() ? 'white' : '#333',
-            border: '1px solid transparent',
+            height: '40px',
+            margin: '0 10px 5px',
+            border: '1px solid #ddd',
+            backgroundColor: selectedLetter === letter ? '#007bff' : '#fff',
+            color: selectedLetter === letter ? '#fff' : '#333',
             borderRadius: '4px',
             cursor: 'pointer',
             fontSize: '14px',
-            fontWeight: 'bold',
-            transition: 'all 0.2s'
-          }}
-          onMouseEnter={(e) => {
-            if (selectedLetter !== letter.toLowerCase()) {
-              e.target.style.backgroundColor = '#e9ecef'
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (selectedLetter !== letter.toLowerCase()) {
-              e.target.style.backgroundColor = 'transparent'
-            }
+            fontWeight: 'bold'
           }}
         >
           {letter}
