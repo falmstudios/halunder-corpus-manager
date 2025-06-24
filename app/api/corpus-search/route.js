@@ -9,15 +9,31 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url)
     const word = searchParams.get('word')
-    const germanWord = searchParams.get('german')
+    const germanWords = searchParams.get('german') // Can be comma-separated
     
-    if (!word) {
+    if (!word && !germanWords) {
       return Response.json({ error: 'Word parameter required' }, { status: 400 })
     }
     
-    console.log('Searching for word:', word)
+    console.log('Searching for word:', word, 'German:', germanWords)
     
-    // Search in parallel_corpus table with proper join
+    // Build query conditions
+    let conditions = []
+    
+    // Add Halunder word search
+    if (word) {
+      conditions.push(`halunder_sentence.ilike.%${word}%`)
+    }
+    
+    // Add German word searches (for each meaning)
+    if (germanWords) {
+      const germanList = germanWords.split(',').map(w => w.trim()).filter(w => w)
+      germanList.forEach(germanWord => {
+        conditions.push(`german_sentence.ilike.%${germanWord}%`)
+      })
+    }
+    
+    // Search with OR conditions
     let query = supabase
       .from('parallel_corpus')
       .select(`
@@ -27,13 +43,7 @@ export async function GET(request) {
         sentence_order,
         source_type
       `)
-    
-    // Use simple contains search
-    if (germanWord) {
-      query = query.or(`halunder_sentence.ilike.%${word}%,german_sentence.ilike.%${germanWord}%`)
-    } else {
-      query = query.ilike('halunder_sentence', `%${word}%`)
-    }
+      .or(conditions.join(','))
     
     const { data, error } = await query.limit(200)
     
@@ -45,52 +55,67 @@ export async function GET(request) {
     console.log('Raw results:', data?.length || 0)
     
     // Filter results in JavaScript to ensure whole word matches
-    const wordRegex = new RegExp(`\\b${word}\\b`, 'i')
-    const germanRegex = germanWord ? new RegExp(`\\b${germanWord}\\b`, 'i') : null
+    const wordRegex = word ? new RegExp(`\\b${word}\\b`, 'i') : null
+    const germanRegexes = germanWords ? 
+      germanWords.split(',').map(w => w.trim()).filter(w => w).map(w => new RegExp(`\\b${w}\\b`, 'i')) : 
+      []
     
     const sentences = (data || [])
       .filter(item => {
-        const halunderMatch = wordRegex.test(item.halunder_sentence)
-        const germanMatch = germanRegex ? germanRegex.test(item.german_sentence) : false
+        const halunderMatch = wordRegex ? wordRegex.test(item.halunder_sentence) : false
+        const germanMatch = germanRegexes.some(regex => regex.test(item.german_sentence))
         return halunderMatch || germanMatch
       })
       .map(item => {
-        // Get text info separately if needed
+        // Highlight all matched words
+        let halunderHighlighted = item.halunder_sentence
+        let germanHighlighted = item.german_sentence
+        
+        if (wordRegex) {
+          halunderHighlighted = halunderHighlighted.replace(
+            wordRegex, 
+            `<mark style="background-color: yellow; padding: 2px;">$&</mark>`
+          )
+        }
+        
+        germanRegexes.forEach(regex => {
+          germanHighlighted = germanHighlighted.replace(
+            regex, 
+            `<mark style="background-color: yellow; padding: 2px;">$&</mark>`
+          )
+        })
+        
         return {
           halunder_sentence: item.halunder_sentence,
           german_sentence: item.german_sentence,
-          source: `Text ${item.source_text_id}`, // Fallback if join fails
+          source_text_id: item.source_text_id,
+          source: `Text ${item.source_text_id}`,
           author: '',
           sentence_order: item.sentence_order,
           source_type: item.source_type,
-          // Highlight the matched word
-          halunder_highlighted: item.halunder_sentence.replace(
-            wordRegex, 
-            `<mark style="background-color: yellow; padding: 2px;">$&</mark>`
-          ),
-          german_highlighted: germanRegex ? 
-            item.german_sentence.replace(germanRegex, `<mark style="background-color: yellow; padding: 2px;">$&</mark>`) : 
-            item.german_sentence
+          halunder_highlighted,
+          german_highlighted
         }
       })
     
-    // If we have results, try to get text titles
+    // Get text titles if we have results
     if (sentences.length > 0) {
-      const textIds = [...new Set(sentences.map(s => s.source_text_id))]
-      const { data: texts } = await supabase
-        .from('texts')
-        .select('id, title, author')
-        .in('id', textIds)
-      
-      // Map text info to sentences
-      if (texts) {
-        sentences.forEach(sentence => {
-          const text = texts.find(t => t.id === sentence.source_text_id)
-          if (text) {
-            sentence.source = text.title || 'Untitled'
-            sentence.author = text.author || ''
-          }
-        })
+      const textIds = [...new Set(sentences.map(s => s.source_text_id).filter(id => id))]
+      if (textIds.length > 0) {
+        const { data: texts } = await supabase
+          .from('texts')
+          .select('id, title, author')
+          .in('id', textIds)
+        
+        if (texts) {
+          sentences.forEach(sentence => {
+            const text = texts.find(t => t.id === sentence.source_text_id)
+            if (text) {
+              sentence.source = text.title || 'Untitled'
+              sentence.author = text.author || ''
+            }
+          })
+        }
       }
     }
     
