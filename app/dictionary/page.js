@@ -12,10 +12,36 @@ export default function DictionaryPage() {
   const [selectedEntry, setSelectedEntry] = useState(null)
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  const [searchType, setSearchType] = useState('both') // halunder, german, both
+  const [searchType, setSearchType] = useState('both')
   const [selectedLetter, setSelectedLetter] = useState(null)
   const [showAddForm, setShowAddForm] = useState(false)
-  const [sources, setSources] = useState(['all'])
+
+  const getWordTypeLabel = (type) => {
+    const typeMap = {
+      'noun': 'Substantiv',
+      'verb': 'Verb',
+      'verb (weak)': 'Verb (schwach)',
+      'verb (strong)': 'Verb (stark)',
+      'adjective': 'Adjektiv',
+      'adverb': 'Adverb',
+      'pronoun': 'Pronomen',
+      'preposition': 'Präposition',
+      'conjunction': 'Konjunktion',
+      'interjection': 'Interjektion',
+      'numeral': 'Zahlwort',
+      'proper noun': 'Eigenname'
+    }
+    return typeMap[type] || type
+  }
+
+  const getArticle = (gender) => {
+    const articleMap = {
+      'M': 'der',
+      'F': 'die',
+      'N': 'das'
+    }
+    return articleMap[gender] || ''
+  }
 
   // Load entries based on search or letter
   const loadEntries = useCallback(async () => {
@@ -155,12 +181,29 @@ export default function DictionaryPage() {
                       backgroundColor: selectedEntry?.id === entry.id ? '#e3f2fd' : 'transparent',
                       transition: 'background-color 0.2s'
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 
-                      selectedEntry?.id === entry.id ? '#e3f2fd' : 'transparent'}
+                    onMouseEnter={(e) => {
+                      if (selectedEntry?.id !== entry.id) {
+                        e.currentTarget.style.backgroundColor = '#f5f5f5'
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (selectedEntry?.id !== entry.id) {
+                        e.currentTarget.style.backgroundColor = 'transparent'
+                      }
+                    }}
                   >
                     <div style={{ fontWeight: 'bold', fontSize: '16px' }}>
                       {entry.halunder_word}
+                      {entry.gender && entry.word_type === 'noun' && (
+                        <span style={{ 
+                          fontWeight: 'normal',
+                          color: '#666',
+                          fontSize: '14px',
+                          marginLeft: '8px'
+                        }}>
+                          , {getArticle(entry.gender)}
+                        </span>
+                      )}
                       {entry.german_word && (
                         <span style={{ 
                           fontWeight: 'normal', 
@@ -175,8 +218,7 @@ export default function DictionaryPage() {
                     
                     {entry.word_type && (
                       <div style={{ fontSize: '12px', color: '#666' }}>
-                        {entry.word_type}
-                        {entry.gender && ` (${entry.gender})`}
+                        {getWordTypeLabel(entry.word_type)}
                       </div>
                     )}
                     
@@ -185,7 +227,10 @@ export default function DictionaryPage() {
                         fontSize: '14px', 
                         color: '#333',
                         marginTop: '5px',
-                        fontStyle: 'italic'
+                        fontStyle: 'italic',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
                       }}>
                         {entry.dictionary_meanings[0].german_meaning}
                       </div>
@@ -208,10 +253,11 @@ export default function DictionaryPage() {
           <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
             {selectedEntry ? (
               <DictionaryEntry 
+                key={selectedEntry.id}
                 entry={selectedEntry}
                 onUpdate={(updatedEntry) => {
                   setSelectedEntry(updatedEntry)
-                  loadEntries() // Refresh list
+                  loadEntries()
                 }}
               />
             ) : (
