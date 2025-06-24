@@ -9,6 +9,10 @@ export async function POST(request) {
   try {
     const { entries, source } = await request.json()
     
+    if (!entries || !Array.isArray(entries)) {
+      return Response.json({ error: 'No valid entries array provided' }, { status: 400 })
+    }
+    
     let processed = 0
     let errors = []
     
@@ -24,20 +28,22 @@ export async function POST(request) {
         
         if (existing) {
           console.log(`Entry ${entry.halunderWord} already exists, skipping`)
+          processed++
           continue
         }
         
-        // Insert main entry
+        // Insert main entry - handle different field names
         const { data: newEntry, error: entryError } = await supabase
           .from('dictionary_entries')
           .insert({
             halunder_word: entry.halunderWord,
-            german_word: entry.germanWord,
+            german_word: entry.germanWord || entry.german_word,
             pronunciation: entry.pronunciation,
-            word_type: entry.wordType,
+            word_type: entry.wordType || entry.word_type,
             gender: entry.gender,
-            plural_form: entry.pluralForm,
-            etymology: entry.etymology || entry.additionalInfo,
+            plural_form: entry.pluralForm || entry.plural || entry.plural_form,
+            etymology: entry.etymology,
+            additional_info: entry.additionalInfo || entry.usage || entry.idioms || entry.references,
             source: source
           })
           .select()
@@ -45,83 +51,97 @@ export async function POST(request) {
         
         if (entryError) throw entryError
         
-        // Insert verb details if present
-        if (entry.verbDetails && (entry.verbDetails.verbClass || entry.verbDetails.conjugationClass)) {
-          await supabase
-            .from('dictionary_verb_details')
-            .insert({
-              entry_id: newEntry.id,
-              verb_class: entry.verbDetails.verbClass,
-              conjugation_class: entry.verbDetails.conjugationClass
-            })
+        // Handle verb details if present
+        if (entry.wordType && entry.wordType.includes('verb')) {
+          // Extract verb class from wordType (e.g., "verb (weak)" -> "weak")
+          const verbClassMatch = entry.wordType.match(/verb\s*\(([^)]+)\)/)
+          if (verbClassMatch || entry.conjugationClass) {
+            await supabase
+              .from('dictionary_verb_details')
+              .insert({
+                entry_id: newEntry.id,
+                verb_class: verbClassMatch ? verbClassMatch[1] : null,
+                conjugation_class: entry.conjugationClass || null
+              })
+          }
         }
         
-        // Insert meanings
-        if (entry.meanings && entry.meanings.length > 0) {
-          const meanings = entry.meanings.map((m, index) => ({
-            entry_id: newEntry.id,
-            meaning_number: m.number || m.meaning_number || index + 1,
-            german_meaning: m.germanMeaning,
-            context: m.context,
-            meaning_order: index
-          }))
-          
-          const { data: insertedMeanings } = await supabase
-            .from('dictionary_meanings')
-            .insert(meanings)
-            .select()
-          
-          // Insert examples for meanings
-          for (let i = 0; i < entry.meanings.length; i++) {
-            const meaning = entry.meanings[i]
-            if (meaning.examples && meaning.examples.length > 0) {
-              const examples = meaning.examples.map((ex, exIndex) => ({
-                entry_id: newEntry.id,
-                meaning_id: insertedMeanings[i].id,
-                halunder_sentence: ex.halunder,
-                german_sentence: ex.german,
-                source_reference: ex.source,
-                example_order: exIndex
-              }))
-              
-              await supabase
-                .from('dictionary_examples')
-                .insert(examples)
-            }
-          }
-        } else if (entry.germanMeaning) {
-          // Single meaning entry
-          const { data: meaning } = await supabase
+        // Handle meanings - your JSON has germanMeaning directly
+        if (entry.germanMeaning) {
+          const { data: meaning, error: meaningError } = await supabase
             .from('dictionary_meanings')
             .insert({
               entry_id: newEntry.id,
               meaning_number: 1,
               german_meaning: entry.germanMeaning,
+              halunder_meaning: entry.halunderMeaning,
+              context: entry.context || entry.usage,
               meaning_order: 0
             })
             .select()
             .single()
           
-          // Insert examples
-          if (entry.examples && entry.examples.length > 0) {
+          if (meaningError) throw meaningError
+          
+          // Handle examples - they're directly on the entry in your JSON
+          if (entry.examples && Array.isArray(entry.examples)) {
             const examples = entry.examples.map((ex, index) => ({
               entry_id: newEntry.id,
               meaning_id: meaning.id,
               halunder_sentence: ex.halunder,
               german_sentence: ex.german,
-              source_reference: ex.source,
+              source_reference: ex.source || ex.note,
               example_order: index
             }))
             
-            await supabase
+            const { error: examplesError } = await supabase
               .from('dictionary_examples')
               .insert(examples)
+            
+            if (examplesError) throw examplesError
           }
+        }
+        
+        // Handle alternative forms as references
+        if (entry.alternativeForms && Array.isArray(entry.alternativeForms)) {
+          for (const altForm of entry.alternativeForms) {
+            // First, check if the alternative form exists as an entry
+            const { data: altEntry } = await supabase
+              .from('dictionary_entries')
+              .select('id')
+              .eq('halunder_word', altForm.replace(/\s*\([^)]*\)\s*/g, '').trim())
+              .single()
+            
+            if (altEntry) {
+              await supabase
+                .from('dictionary_references')
+                .insert({
+                  entry_id: newEntry.id,
+                  referenced_entry_id: altEntry.id,
+                  reference_type: 'alternative_form',
+                  notes: 'Alternative form'
+                })
+            }
+          }
+        }
+        
+        // Handle compounds
+        if (entry.compounds && Array.isArray(entry.compounds)) {
+          const compounds = entry.compounds.map(comp => ({
+            base_entry_id: newEntry.id,
+            compound_word: comp.word || comp,
+            compound_meaning: comp.meaning || null
+          }))
+          
+          await supabase
+            .from('dictionary_compounds')
+            .insert(compounds)
         }
         
         processed++
         
       } catch (entryError) {
+        console.error(`Error processing entry ${entry.halunderWord}:`, entryError)
         errors.push({
           word: entry.halunderWord,
           error: entryError.message
@@ -132,7 +152,8 @@ export async function POST(request) {
     return Response.json({
       processed,
       total: entries.length,
-      errors
+      errors,
+      message: `Successfully imported ${processed} of ${entries.length} entries`
     })
     
   } catch (error) {
