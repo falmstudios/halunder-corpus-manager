@@ -208,13 +208,13 @@ export default function DictionaryPage() {
             {selectedEntry ? (
               <DictionaryEntry 
                 entry={selectedEntry}
-                onUpdate={loadEntries}
+                onUpdate={() => loadEntries()}
               />
             ) : (
               <div style={{ 
                 textAlign: 'center', 
                 color: '#666',
-                marginTop: '50px'
+                marginTop: '100px'
               }}>
                 Wähle einen Eintrag aus der Liste
               </div>
@@ -225,7 +225,7 @@ export default function DictionaryPage() {
 
       {/* Add Entry Modal */}
       {showAddForm && (
-        <AddEntryModal 
+        <AddEntryModal
           onClose={() => setShowAddForm(false)}
           onSave={() => {
             setShowAddForm(false)
