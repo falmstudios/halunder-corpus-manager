@@ -3,22 +3,17 @@
 import { useState } from 'react'
 
 export default function AddEntryModal({ onClose, onSave }) {
-  const [formData, setFormData] = useState({
+  const [entry, setEntry] = useState({
     halunder_word: '',
     german_word: '',
     pronunciation: '',
-    word_type: '',
+    word_type: 'noun',
     gender: '',
     plural_form: '',
     etymology: '',
-    source: 'manual',
     meanings: [{
       german_meaning: '',
-      context: ''
-    }],
-    examples: [{
-      halunder_sentence: '',
-      german_sentence: ''
+      examples: []
     }]
   })
 
@@ -29,33 +24,16 @@ export default function AddEntryModal({ onClose, onSave }) {
       const response = await fetch('/api/dictionary/entry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(entry)
       })
       
       if (response.ok) {
-        onSave()
-      } else {
-        const error = await response.json()
-        alert('Fehler: ' + error.message)
+        const data = await response.json()
+        onSave(data.entry)
       }
     } catch (error) {
-      console.error('Failed to save entry:', error)
-      alert('Fehler beim Speichern')
+      console.error('Failed to create entry:', error)
     }
-  }
-
-  const addMeaning = () => {
-    setFormData({
-      ...formData,
-      meanings: [...formData.meanings, { german_meaning: '', context: '' }]
-    })
-  }
-
-  const addExample = () => {
-    setFormData({
-      ...formData,
-      examples: [...formData.examples, { halunder_sentence: '', german_sentence: '' }]
-    })
   }
 
   return (
@@ -73,77 +51,105 @@ export default function AddEntryModal({ onClose, onSave }) {
     }}>
       <div style={{
         backgroundColor: 'white',
-        borderRadius: '8px',
         padding: '30px',
+        borderRadius: '8px',
+        maxWidth: '600px',
         width: '90%',
-        maxWidth: '800px',
-        maxHeight: '90vh',
+        maxHeight: '80vh',
         overflow: 'auto'
       }}>
-        <h2 style={{ marginTop: 0 }}>Neuer Wörterbucheintrag</h2>
+        <h2 style={{ marginBottom: '20px' }}>Neuer Wörterbucheintrag</h2>
         
         <form onSubmit={handleSubmit}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                Halunder Wort *
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.halunder_word}
-                onChange={(e) => setFormData({...formData, halunder_word: e.target.value})}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px'
-                }}
-              />
-            </div>
-            
-            <div>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                Deutsches Wort
-              </label>
-              <input
-                type="text"
-                value={formData.german_word}
-                onChange={(e) => setFormData({...formData, german_word: e.target.value})}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px'
-                }}
-              />
-            </div>
-            
-            <div>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                Aussprache
-              </label>
-              <input
-                type="text"
-                value={formData.pronunciation}
-                onChange={(e) => setFormData({...formData, pronunciation: e.target.value})}
-                placeholder="z.B. [de:l]"
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px'
-                }}
-              />
-            </div>
-            
-            <div>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                Wortart
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'block', marginBottom: '5px' }}>
+              Halunder Wort *
+            </label>
+            <input
+              type="text"
+              value={entry.halunder_word}
+              onChange={(e) => setEntry({...entry, halunder_word: e.target.value})}
+              required
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ddd',
+                borderRadius: '4px'
+              }}
+            />
+          </div>
+          
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'block', marginBottom: '5px' }}>
+              Deutsche Übersetzung
+            </label>
+            <input
+              type="text"
+              value={entry.german_word}
+              onChange={(e) => setEntry({...entry, german_word: e.target.value})}
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ddd',
+                borderRadius: '4px'
+              }}
+            />
+          </div>
+          
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'block', marginBottom: '5px' }}>
+              Bedeutung *
+            </label>
+            <textarea
+              value={entry.meanings[0].german_meaning}
+              onChange={(e) => setEntry({
+                ...entry,
+                meanings: [{...entry.meanings[0], german_meaning: e.target.value}]
+              })}
+              required
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                minHeight: '60px'
+              }}
+            />
+          </div>
+          
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'block', marginBottom: '5px' }}>
+              Wortart
+            </label>
+            <select
+              value={entry.word_type}
+              onChange={(e) => setEntry({...entry, word_type: e.target.value})}
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ddd',
+                borderRadius: '4px'
+              }}
+            >
+              <option value="noun">Substantiv</option>
+              <option value="verb">Verb</option>
+              <option value="adjective">Adjektiv</option>
+              <option value="adverb">Adverb</option>
+              <option value="pronoun">Pronomen</option>
+              <option value="preposition">Präposition</option>
+              <option value="conjunction">Konjunktion</option>
+              <option value="interjection">Interjektion</option>
+            </select>
+          </div>
+          
+          {entry.word_type === 'noun' && (
+            <div style={{ marginBottom: '15px' }}>
+              <label style={{ display: 'block', marginBottom: '5px' }}>
+                Geschlecht
               </label>
               <select
-                value={formData.word_type}
-                onChange={(e) => setFormData({...formData, word_type: e.target.value})}
+                value={entry.gender}
+                onChange={(e) => setEntry({...entry, gender: e.target.value})}
                 style={{
                   width: '100%',
                   padding: '8px',
@@ -151,189 +157,36 @@ export default function AddEntryModal({ onClose, onSave }) {
                   borderRadius: '4px'
                 }}
               >
-                <option value="">-- Wählen --</option>
-                <option value="noun">Substantiv</option>
-                <option value="verb">Verb</option>
-                <option value="adjective">Adjektiv</option>
-                <option value="adverb">Adverb</option>
-                <option value="pronoun">Pronomen</option>
-                <option value="preposition">Präposition</option>
-                <option value="conjunction">Konjunktion</option>
-                <option value="interjection">Interjektion</option>
+                <option value="">Wählen...</option>
+                <option value="M">Maskulin</option>
+                <option value="F">Feminin</option>
+                <option value="N">Neutral</option>
               </select>
             </div>
+          )}
+          
+          <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+            <button
+              type="submit"
+              style={{
+                flex: 1,
+                padding: '10px',
+                backgroundColor: '#28a745',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              Speichern
+            </button>
             
-            {formData.word_type === 'noun' && (
-              <>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                    Geschlecht
-                  </label>
-                  <select
-                    value={formData.gender}
-                    onChange={(e) => setFormData({...formData, gender: e.target.value})}
-                    style={{
-                      width: '100%',
-                      padding: '8px',
-                      border: '1px solid #ddd',
-                      borderRadius: '4px'
-                    }}
-                  >
-                    <option value="">-- Wählen --</option>
-                    <option value="M">Maskulinum (M)</option>
-                    <option value="F">Femininum (F)</option>
-                    <option value="N">Neutrum (N)</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                    Pluralform
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.plural_form}
-                    onChange={(e) => setFormData({...formData, plural_form: e.target.value})}
-                    style={{
-                      width: '100%',
-                      padding: '8px',
-                      border: '1px solid #ddd',
-                      borderRadius: '4px'
-                    }}
-                  />
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Meanings */}
-          <div style={{ marginBottom: '20px' }}>
-            <h3>Bedeutungen</h3>
-            {formData.meanings.map((meaning, index) => (
-              <div key={index} style={{ 
-                padding: '15px', 
-                backgroundColor: '#f8f9fa',
-                borderRadius: '4px',
-                marginBottom: '10px'
-              }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px' }}>
-                  <input
-                    type="text"
-                    placeholder="Deutsche Bedeutung"
-                    value={meaning.german_meaning}
-                    onChange={(e) => {
-                      const newMeanings = [...formData.meanings]
-                      newMeanings[index].german_meaning = e.target.value
-                      setFormData({...formData, meanings: newMeanings})
-                    }}
-                    style={{
-                      padding: '8px',
-                      border: '1px solid #ddd',
-                      borderRadius: '4px'
-                    }}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Kontext (optional)"
-                    value={meaning.context}
-                    onChange={(e) => {
-                      const newMeanings = [...formData.meanings]
-                      newMeanings[index].context = e.target.value
-                      setFormData({...formData, meanings: newMeanings})
-                    }}
-                    style={{
-                      padding: '8px',
-                      border: '1px solid #ddd',
-                      borderRadius: '4px'
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={addMeaning}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: '#007bff',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer'
-              }}
-            >
-              + Bedeutung hinzufügen
-            </button>
-          </div>
-
-          {/* Examples */}
-          <div style={{ marginBottom: '20px' }}>
-            <h3>Beispiele</h3>
-            {formData.examples.map((example, index) => (
-              <div key={index} style={{ 
-                padding: '15px', 
-                backgroundColor: '#f8f9fa',
-                borderRadius: '4px',
-                marginBottom: '10px'
-              }}>
-                <input
-                  type="text"
-                  placeholder="Halunder Beispielsatz"
-                  value={example.halunder_sentence}
-                  onChange={(e) => {
-                    const newExamples = [...formData.examples]
-                    newExamples[index].halunder_sentence = e.target.value
-                    setFormData({...formData, examples: newExamples})
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px',
-                    marginBottom: '10px'
-                  }}
-                />
-                <input
-                  type="text"
-                  placeholder="Deutsche Übersetzung"
-                  value={example.german_sentence}
-                  onChange={(e) => {
-                    const newExamples = [...formData.examples]
-                    newExamples[index].german_sentence = e.target.value
-                    setFormData({...formData, examples: newExamples})
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px'
-                  }}
-                />
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={addExample}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: '#007bff',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer'
-              }}
-            >
-              + Beispiel hinzufügen
-            </button>
-          </div>
-
-          {/* Actions */}
-          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             <button
               type="button"
               onClick={onClose}
               style={{
-                padding: '10px 20px',
+                flex: 1,
+                padding: '10px',
                 backgroundColor: '#6c757d',
                 color: 'white',
                 border: 'none',
@@ -342,20 +195,6 @@ export default function AddEntryModal({ onClose, onSave }) {
               }}
             >
               Abbrechen
-            </button>
-            <button
-              type="submit"
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#28a745',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontWeight: 'bold'
-              }}
-            >
-              Speichern
             </button>
           </div>
         </form>
