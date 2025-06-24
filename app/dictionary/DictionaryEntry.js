@@ -477,3 +477,57 @@ export default function DictionaryEntry({ entry, onUpdate }) {
                       borderRadius: '4px',
                       marginBottom: '10px',
                       backgroundColor: '#f8f9fa'
+                    }}>
+                      <div style={{ marginBottom: '8px' }}>
+                        <strong>Halunder:</strong> 
+                        <span dangerouslySetInnerHTML={{ __html: sentence.halunder_highlighted }} />
+                      </div>
+                      <div style={{ marginBottom: '8px' }}>
+                        <strong>Deutsch:</strong> 
+                        <span dangerouslySetInnerHTML={{ __html: sentence.german_highlighted }} />
+                      </div>
+                      <div style={{ 
+                        fontSize: '12px', 
+                        color: '#666',
+                        fontStyle: 'italic',
+                        marginBottom: '8px'
+                      }}>
+                        Quelle: {sentence.source} {sentence.author && `(${sentence.author})`}
+                      </div>
+                      <button
+                        onClick={() => addExampleFromCorpus(sentence)}
+                        style={{
+                          padding: '5px 15px',
+                          backgroundColor: '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '14px'
+                        }}
+                      >
+                        Als Beispiel hinzufügen
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Source info */}
+      <div style={{ 
+        marginTop: '30px',
+        paddingTop: '20px',
+        borderTop: '1px solid #ddd',
+        fontSize: '12px',
+        color: '#6c757d'
+      }}>
+        <div>Quelle: {entry.source}</div>
+        <div>Eingetragen: {new Date(entry.created_at).toLocaleDateString('de-DE')}</div>
+      </div>
+    </div>
+  )
+}
