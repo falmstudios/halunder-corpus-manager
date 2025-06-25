@@ -19,6 +19,7 @@ export default function CorpusViewer() {
   const [selectedSentences, setSelectedSentences] = useState(new Set())
   const [editingSentence, setEditingSentence] = useState(null)
   const [calculating, setCalculating] = useState(false)
+  const [savingEdit, setSavingEdit] = useState(false)
 
   useEffect(() => {
     loadProcessedTexts()
@@ -28,6 +29,9 @@ export default function CorpusViewer() {
   }, [reviewMode])
 
   useEffect(() => {
+    // Clear selections when switching buckets
+    setSelectedSentences(new Set())
+    
     if (reviewMode && selectedBucket !== 'all') {
       loadQualitySentences()
     } else if (!reviewMode) {
@@ -110,7 +114,29 @@ export default function CorpusViewer() {
       const response = await fetch('/api/corpus-quality/buckets')
       const data = await response.json()
       if (response.ok) {
-        setBuckets(data.buckets)
+        // Add unreviewed bucket to the list
+        const allBuckets = [
+          ...data.buckets,
+          {
+            key: 'unreviewed',
+            label: 'Unbewertet',
+            color: '#6c757d',
+            description: 'Noch nicht bewertet',
+            count: 0 // Will be updated separately
+          }
+        ]
+        
+        // Get unreviewed count
+        const unreviewedResponse = await fetch('/api/corpus-quality/sentences?bucket=unreviewed&limit=1')
+        if (unreviewedResponse.ok) {
+          const unreviewedData = await unreviewedResponse.json()
+          const unreviewedBucket = allBuckets.find(b => b.key === 'unreviewed')
+          if (unreviewedBucket) {
+            unreviewedBucket.count = unreviewedData.pagination.total || 0
+          }
+        }
+        
+        setBuckets(allBuckets)
       }
     } catch (err) {
       console.error('Failed to load buckets:', err)
@@ -134,7 +160,7 @@ export default function CorpusViewer() {
   }
 
   const calculateAllMetrics = async () => {
-    if (!confirm('Qualitätsmetriken für alle Sätze berechnen? Dies kann einige Minuten dauern.')) {
+    if (!confirm('Qualitätsmetriken für alle unbewerteten Sätze berechnen? Dies kann einige Minuten dauern.')) {
       return
     }
 
@@ -143,7 +169,7 @@ export default function CorpusViewer() {
       const response = await fetch('/api/corpus-quality/calculate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
+        body: JSON.stringify({ forceRecalculate: true })
       })
       
       const data = await response.json()
@@ -164,12 +190,23 @@ export default function CorpusViewer() {
     }
   }
 
-  const handleSentenceUpdate = async (sentenceId, updates) => {
+  const handleSentenceUpdate = async (sentenceId) => {
+    setSavingEdit(true)
     try {
+      const halunderText = document.getElementById(`halunder-${sentenceId}`).value
+      const germanText = document.getElementById(`german-${sentenceId}`).value
+      const notes = document.getElementById(`notes-${sentenceId}`)?.value || ''
+      
       const response = await fetch('/api/corpus-quality/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: sentenceId, ...updates })
+        body: JSON.stringify({ 
+          id: sentenceId, 
+          halunder_sentence: halunderText,
+          german_sentence: germanText,
+          quality_reviewer_notes: notes,
+          quality_reviewed: true
+        })
       })
 
       const data = await response.json()
@@ -183,17 +220,56 @@ export default function CorpusViewer() {
     } catch (err) {
       console.error('Failed to update sentence:', err)
       alert('Fehler beim Aktualisieren')
+    } finally {
+      setSavingEdit(false)
     }
   }
 
   const moveSentenceToBucket = async (sentenceId, targetBucket) => {
-    await handleSentenceUpdate(sentenceId, { quality_bucket: targetBucket })
+    try {
+      const response = await fetch('/api/corpus-quality/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          id: sentenceId, 
+          quality_bucket: targetBucket 
+        })
+      })
+
+      const data = await response.json()
+      if (response.ok) {
+        loadQualitySentences()
+        loadBuckets()
+      } else {
+        alert('Fehler: ' + data.error)
+      }
+    } catch (err) {
+      console.error('Failed to move sentence:', err)
+      alert('Fehler beim Verschieben')
+    }
   }
 
   const getQualityBadges = (sentence) => {
     const badges = []
     
-    if (sentence.quality_tags?.includes('similar_length')) {
+    // Check if we have quality tags
+    if (!sentence.quality_tags || sentence.quality_tags.length === 0) {
+      badges.push(
+        <span key="no-tags" style={{
+          padding: '2px 8px',
+          backgroundColor: '#6c757d',
+          color: 'white',
+          borderRadius: '12px',
+          fontSize: '12px',
+          marginRight: '4px'
+        }}>
+          Nicht bewertet
+        </span>
+      )
+      return badges
+    }
+    
+    if (sentence.quality_tags.includes('similar_length')) {
       badges.push(
         <span key="length-similar" style={{
           padding: '2px 8px',
@@ -206,7 +282,7 @@ export default function CorpusViewer() {
           Länge ✓
         </span>
       )
-    } else if (sentence.quality_tags?.includes('different_length')) {
+    } else if (sentence.quality_tags.includes('different_length')) {
       badges.push(
         <span key="length-different" style={{
           padding: '2px 8px',
@@ -221,7 +297,7 @@ export default function CorpusViewer() {
       )
     }
     
-    if (sentence.quality_tags?.includes('similar_punctuation')) {
+    if (sentence.quality_tags.includes('similar_punctuation')) {
       badges.push(
         <span key="punct-similar" style={{
           padding: '2px 8px',
@@ -234,7 +310,7 @@ export default function CorpusViewer() {
           Interpunktion ✓
         </span>
       )
-    } else if (sentence.quality_tags?.includes('very_different_punctuation')) {
+    } else if (sentence.quality_tags.includes('very_different_punctuation')) {
       badges.push(
         <span key="punct-different" style={{
           padding: '2px 8px',
@@ -289,30 +365,41 @@ export default function CorpusViewer() {
             />
           </div>
           
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Notizen:</label>
+            <textarea
+              id={`notes-${sentence.id}`}
+              defaultValue={sentence.quality_reviewer_notes || ''}
+              placeholder="Anmerkungen zur Überprüfung..."
+              style={{
+                width: '100%',
+                padding: '10px',
+                borderRadius: '4px',
+                border: '1px solid #ced4da',
+                minHeight: '60px'
+              }}
+            />
+          </div>
+          
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
-              onClick={() => {
-                const halunderText = document.getElementById(`halunder-${sentence.id}`).value
-                const germanText = document.getElementById(`german-${sentence.id}`).value
-                handleSentenceUpdate(sentence.id, {
-                  halunder_sentence: halunderText,
-                  german_sentence: germanText,
-                  quality_reviewed: true
-                })
-              }}
+              onClick={() => handleSentenceUpdate(sentence.id)}
+              disabled={savingEdit}
               style={{
                 padding: '8px 16px',
                 backgroundColor: '#28a745',
                 color: 'white',
                 border: 'none',
                 borderRadius: '4px',
-                cursor: 'pointer'
+                cursor: savingEdit ? 'not-allowed' : 'pointer',
+                opacity: savingEdit ? 0.6 : 1
               }}
             >
-              Speichern
+              {savingEdit ? 'Speichert...' : 'Speichern'}
             </button>
             <button
               onClick={() => setEditingSentence(null)}
+              disabled={savingEdit}
               style={{
                 padding: '8px 16px',
                 backgroundColor: '#6c757d',
@@ -349,24 +436,45 @@ export default function CorpusViewer() {
             />
             {getQualityBadges(sentence)}
           </div>
-          <button
-            onClick={() => setEditingSentence(sentence.id)}
-            style={{
-              padding: '4px 12px',
-              backgroundColor: '#007bff',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '14px'
-            }}
-          >
-            Bearbeiten
-          </button>
+          <div style={{ display: 'flex', gap: '5px' }}>
+            <button
+              onClick={() => setEditingSentence(sentence.id)}
+              style={{
+                padding: '4px 12px',
+                backgroundColor: '#007bff',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              Bearbeiten
+            </button>
+            <select
+              onChange={(e) => {
+                if (e.target.value) {
+                  moveSentenceToBucket(sentence.id, e.target.value)
+                }
+              }}
+              style={{
+                padding: '4px 8px',
+                borderRadius: '4px',
+                border: '1px solid #ced4da',
+                fontSize: '14px'
+              }}
+              defaultValue=""
+            >
+              <option value="">Verschieben...</option>
+              {buckets.filter(b => b.key !== selectedBucket && b.key !== 'all').map(bucket => (
+                <option key={bucket.key} value={bucket.key}>{bucket.label}</option>
+              ))}
+            </select>
+          </div>
         </div>
         
         <div style={{ marginBottom: '8px' }}>
-          <strong>Halunder ({sentence.halunder_word_count || 0} Wörter):</strong>
+          <strong>Halunder ({sentence.halunder_word_count || 0} Wörter, {sentence.halunder_punctuation_count || 0} Satzzeichen):</strong>
           <div style={{ 
             padding: '8px',
             backgroundColor: '#f8f9fa',
@@ -380,7 +488,7 @@ export default function CorpusViewer() {
         </div>
         
         <div style={{ marginBottom: '8px' }}>
-          <strong>Deutsch ({sentence.german_word_count || 0} Wörter):</strong>
+          <strong>Deutsch ({sentence.german_word_count || 0} Wörter, {sentence.german_punctuation_count || 0} Satzzeichen):</strong>
           <div style={{ 
             padding: '8px',
             backgroundColor: '#f8f9fa',
@@ -398,6 +506,18 @@ export default function CorpusViewer() {
           Interpunktion: {sentence.punctuation_ratio ? (sentence.punctuation_ratio * 100).toFixed(0) : 0}%
           {sentence.texts && ` | ${sentence.texts.title}`}
         </div>
+        
+        {sentence.quality_reviewer_notes && (
+          <div style={{
+            marginTop: '8px',
+            padding: '8px',
+            backgroundColor: '#fff3cd',
+            borderRadius: '4px',
+            fontSize: '12px'
+          }}>
+            <strong>Notizen:</strong> {sentence.quality_reviewer_notes}
+          </div>
+        )}
       </>
     )
   }
@@ -422,6 +542,7 @@ export default function CorpusViewer() {
               setReviewMode(!reviewMode)
               setSelectedBucket('all')
               setSelectedSentences(new Set())
+              setEditingSentence(null)
             }}
             style={{
               width: '100%',
@@ -462,7 +583,10 @@ export default function CorpusViewer() {
           <div>
             <h3 style={{ marginBottom: '15px' }}>Buckets</h3>
             <div
-              onClick={() => setSelectedBucket('all')}
+              onClick={() => {
+                setSelectedBucket('all')
+                setEditingSentence(null)
+              }}
               style={{
                 padding: '12px',
                 marginBottom: '8px',
@@ -480,7 +604,10 @@ export default function CorpusViewer() {
             {buckets.map(bucket => (
               <div
                 key={bucket.key}
-                onClick={() => setSelectedBucket(bucket.key)}
+                onClick={() => {
+                  setSelectedBucket(bucket.key)
+                  setEditingSentence(null)
+                }}
                 style={{
                   padding: '12px',
                   marginBottom: '8px',
@@ -690,7 +817,7 @@ export default function CorpusViewer() {
                             }}
                           >
                             <option value="">Verschieben nach...</option>
-                            {buckets.filter(b => b.key !== selectedBucket).map(bucket => (
+                            {buckets.filter(b => b.key !== selectedBucket && b.key !== 'all').map(bucket => (
                               <option key={bucket.key} value={bucket.key}>{bucket.label}</option>
                             ))}
                           </select>
