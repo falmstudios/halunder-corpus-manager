@@ -126,7 +126,22 @@ export default function DictionaryPage() {
           backgroundColor: '#f8f9fa'
         }}>
           <h1 style={{ margin: '0 0 20px 0' }}>Halunder Wörterbuch</h1>
-          
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
+  <h1>Wörterbuch</h1>
+  <a 
+    href="/" 
+    style={{
+      padding: '10px 20px',
+      backgroundColor: '#6c757d',
+      color: 'white',
+      textDecoration: 'none',
+      borderRadius: '4px'
+    }}
+  >
+    ← Home
+  </a>
+</div>
           <DictionarySearch 
             onSearch={handleSearch}
             searchTerm={searchTerm}
