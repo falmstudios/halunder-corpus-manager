@@ -9,122 +9,85 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url)
     const word = searchParams.get('word')
-    const germanWords = searchParams.get('german') // Can be comma-separated
+    const germanWords = searchParams.get('german')
     
-    if (!word && !germanWords) {
-      return Response.json({ error: 'Word parameter required' }, { status: 400 })
+    if (!word) {
+      return Response.json({ error: 'Word parameter is required' }, { status: 400 })
     }
-    
+
     console.log('Searching for word:', word, 'German:', germanWords)
-    
-    // Build query conditions
-    let conditions = []
-    
-    // Add Halunder word search
-    if (word) {
-      conditions.push(`halunder_sentence.ilike.%${word}%`)
-    }
-    
-    // Add German word searches (for each meaning)
-    if (germanWords) {
-      const germanList = germanWords.split(',').map(w => w.trim()).filter(w => w)
-      germanList.forEach(germanWord => {
-        conditions.push(`german_sentence.ilike.%${germanWord}%`)
-      })
-    }
-    
-    // Search with OR conditions
+
+    // Search in parallel corpus
     let query = supabase
       .from('parallel_corpus')
       .select(`
+        id,
         halunder_sentence,
         german_sentence,
         source_text_id,
-        sentence_order,
-        source_type
+        texts!source_text_id (
+          title,
+          author
+        )
       `)
-      .or(conditions.join(','))
+
+    // Build OR conditions for search
+    let orConditions = [`halunder_sentence.ilike.%${word}%`]
     
-    const { data, error } = await query.limit(200)
+    if (germanWords) {
+      const germanWordList = germanWords.split(',').map(w => w.trim()).filter(w => w)
+      germanWordList.forEach(germanWord => {
+        orConditions.push(`german_sentence.ilike.%${germanWord}%`)
+      })
+    }
+
+    query = query.or(orConditions.join(','))
     
+    const { data, error } = await query
+
     if (error) {
       console.error('Database error:', error)
-      throw error
+      return Response.json({ error: error.message }, { status: 500 })
     }
-    
+
     console.log('Raw results:', data?.length || 0)
-    
-    // Filter results in JavaScript to ensure whole word matches
-    const wordRegex = word ? new RegExp(`\\b${word}\\b`, 'i') : null
-    const germanRegexes = germanWords ? 
-      germanWords.split(',').map(w => w.trim()).filter(w => w).map(w => new RegExp(`\\b${w}\\b`, 'i')) : 
-      []
-    
-    const sentences = (data || [])
-      .filter(item => {
-        const halunderMatch = wordRegex ? wordRegex.test(item.halunder_sentence) : false
-        const germanMatch = germanRegexes.some(regex => regex.test(item.german_sentence))
-        return halunderMatch || germanMatch
-      })
-      .map(item => {
-        // Highlight all matched words
-        let halunderHighlighted = item.halunder_sentence
-        let germanHighlighted = item.german_sentence
-        
-        if (wordRegex) {
-          halunderHighlighted = halunderHighlighted.replace(
-            wordRegex, 
-            `<mark style="background-color: yellow; padding: 2px;">$&</mark>`
-          )
-        }
-        
-        germanRegexes.forEach(regex => {
-          germanHighlighted = germanHighlighted.replace(
-            regex, 
-            `<mark style="background-color: yellow; padding: 2px;">$&</mark>`
-          )
+
+    // Process results to add highlighting
+    const sentences = (data || []).map(sentence => {
+      // Create highlighted versions
+      let halunderHighlighted = sentence.halunder_sentence
+      let germanHighlighted = sentence.german_sentence
+      
+      // Highlight the search word in Halunder sentence
+      const halunderRegex = new RegExp(`\\b${word}\\b`, 'gi')
+      halunderHighlighted = halunderHighlighted.replace(halunderRegex, '<mark>$&</mark>')
+      
+      // Highlight German words if provided
+      if (germanWords) {
+        const germanWordList = germanWords.split(',').map(w => w.trim()).filter(w => w)
+        germanWordList.forEach(germanWord => {
+          const germanRegex = new RegExp(`\\b${germanWord}\\b`, 'gi')
+          germanHighlighted = germanHighlighted.replace(germanRegex, '<mark>$&</mark>')
         })
-        
-        return {
-          halunder_sentence: item.halunder_sentence,
-          german_sentence: item.german_sentence,
-          source_text_id: item.source_text_id,
-          source: `Text ${item.source_text_id}`,
-          author: '',
-          sentence_order: item.sentence_order,
-          source_type: item.source_type,
-          halunder_highlighted,
-          german_highlighted
-        }
-      })
-    
-    // Get text titles if we have results
-    if (sentences.length > 0) {
-      const textIds = [...new Set(sentences.map(s => s.source_text_id).filter(id => id))]
-      if (textIds.length > 0) {
-        const { data: texts } = await supabase
-          .from('texts')
-          .select('id, title, author')
-          .in('id', textIds)
-        
-        if (texts) {
-          sentences.forEach(sentence => {
-            const text = texts.find(t => t.id === sentence.source_text_id)
-            if (text) {
-              sentence.source = text.title || 'Untitled'
-              sentence.author = text.author || ''
-            }
-          })
-        }
       }
-    }
-    
-    console.log('Filtered results:', sentences.length)
-    
-    return Response.json({ sentences })
-    
+      
+      return {
+        id: sentence.id,
+        halunder_sentence: sentence.halunder_sentence,
+        german_sentence: sentence.german_sentence,
+        halunder_highlighted: halunderHighlighted,
+        german_highlighted: germanHighlighted,
+        source: sentence.texts?.title || 'Unbekannte Quelle',
+        author: sentence.texts?.author || null
+      }
+    })
+
+    return Response.json({ sentences }, { status: 200 })
+
   } catch (error) {
     console.error('Corpus search error:', error)
-    return Response.json({ error: error.message }, { status: 500 })
+    return Response.json({ 
+      error: error.message || 'Search failed' 
+    }, { status: 500 })
   }
 }
