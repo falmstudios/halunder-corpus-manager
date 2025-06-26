@@ -82,16 +82,23 @@ export default function DictionaryImportPage() {
             {importing && (
               <div style={{ color: '#3498db' }}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <div style={{
-                    display: 'inline-block',
-                    width: '20px',
-                    height: '20px',
-                    marginRight: '10px',
-                    border: '3px solid #f3f3f3',
-                    borderTop: '3px solid #3498db',
-                    borderRadius: '50%',
-                    animation: 'spin 1s linear infinite'
-                  }} />
+                  <style dangerouslySetInnerHTML={{ __html: `
+                    @keyframes spin {
+                      0% { transform: rotate(0deg); }
+                      100% { transform: rotate(360deg); }
+                    }
+                    .spinner {
+                      display: inline-block;
+                      width: 20px;
+                      height: 20px;
+                      margin-right: 10px;
+                      border: 3px solid #f3f3f3;
+                      border-top: 3px solid #3498db;
+                      border-radius: 50%;
+                      animation: spin 1s linear infinite;
+                    }
+                  `}} />
+                  <div className="spinner" />
                   Importing dictionary entries...
                 </div>
               </div>
@@ -168,13 +175,6 @@ export default function DictionaryImportPage() {
           </div>
         </div>
       </div>
-
-      <style jsx>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
     </>
   )
 }
