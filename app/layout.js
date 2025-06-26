@@ -6,9 +6,8 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body style={{ margin: 0, padding: 0, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
-        {children}
-        <style jsx global>{`
+      <head>
+        <style dangerouslySetInnerHTML={{ __html: `
           body {
             margin: 0;
             padding: 0;
@@ -50,7 +49,10 @@ export default function RootLayout({ children }) {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
           }
-        `}</style>
+        `}} />
+      </head>
+      <body>
+        {children}
       </body>
     </html>
   )
