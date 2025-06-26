@@ -189,11 +189,12 @@ export default function CorpusViewer() {
       
       const data = await response.json()
       if (response.ok) {
-        alert(`Erfolgreich ${data.updated} von ${data.processed} Sätzen verarbeitet!\n\nVerteilung:\n${Object.entries(data.bucketCounts).map(([k,v]) => `${k}: ${v}`).join('\n')}`)
-        loadBuckets()
-        if (selectedBucket !== 'all') {
-          loadQualitySentences()
-        }
+  alert(`Erfolgreich ${data.updated} von ${data.totalFound} Sätzen verarbeitet!\n\nVerteilung:\n${Object.entries(data.bucketCounts).map(([k,v]) => `${k}: ${v}`).join('\n')}`)
+  loadBuckets()
+  if (selectedBucket !== 'all') {
+    loadQualitySentences()
+  }
+}
       } else {
         alert('Fehler: ' + data.error)
       }
