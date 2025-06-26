@@ -462,8 +462,8 @@ export default function CorpusViewer() {
                           backgroundColor: page === 1 ? '#e9ecef' : '#007bff',
                           color: page === 1 ? '#6c757d' : 'white',
                           border: 'none',
-                          borderRadius: '4px
-                            cursor: page === 1 ? 'not-allowed' : 'pointer'
+                          borderRadius: '4px',
+                          cursor: page === 1 ? 'not-allowed' : 'pointer'
                         }}
                       >
                         Zurück
