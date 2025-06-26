@@ -18,6 +18,19 @@ export async function POST(request) {
     
     for (const entry of entries) {
       try {
+        // Check if entry already exists
+        const { data: existing } = await supabase
+          .from('dictionary_entries')
+          .select('id')
+          .eq('halunder_word', entry.halunderWord)
+          .eq('homonym_number', entry.homonymNumber || null)
+          .single()
+        
+        if (existing) {
+          console.log(`Entry already exists: ${entry.halunderWord}`)
+          continue
+        }
+        
         // Insert main dictionary entry
         const { data: newEntry, error: entryError } = await supabase
           .from('dictionary_entries')
@@ -34,7 +47,7 @@ export async function POST(request) {
             homonym_number: entry.homonymNumber,
             alternate_forms: entry.alternativeForms,
             idioms: entry.idioms,
-            references: entry.references,
+            reference_notes: entry.references,
             related_words: entry.relatedWords,
             compounds: entry.compounds,
             source: source
