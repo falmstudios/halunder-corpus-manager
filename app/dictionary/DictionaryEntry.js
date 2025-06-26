@@ -1,289 +1,213 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Navbar from '../../components/Navbar'
 
-export default function DictionaryEntry({ entry, onUpdate }) {
-  const [isEditing, setIsEditing] = useState(false)
-  const [editedEntry, setEditedEntry] = useState(entry)
-  const [isSaving, setIsSaving] = useState(false)
+export default function DictionaryImport() {
+  const router = useRouter()
+  const [jsonText, setJsonText] = useState('')
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [results, setResults] = useState(null)
+  const [error, setError] = useState('')
 
-  const getWordTypeLabel = (type) => {
-    const typeMap = {
-      'noun': 'Substantiv',
-      'verb': 'Verb',
-      'verb (weak)': 'Verb (schwach)',
-      'verb (strong)': 'Verb (stark)',
-      'adjective': 'Adjektiv',
-      'adverb': 'Adverb',
-      'pronoun': 'Pronomen',
-      'preposition': 'Präposition',
-      'conjunction': 'Konjunktion',
-      'interjection': 'Interjektion',
-      'numeral': 'Zahlwort',
-      'proper noun': 'Eigenname'
+  const handleImport = async () => {
+    if (!jsonText.trim()) {
+      setError('Bitte fügen Sie JSON-Daten ein')
+      return
     }
-    return typeMap[type] || type
-  }
 
-  const getArticle = (gender) => {
-    const articleMap = {
-      'M': 'der',
-      'F': 'die',
-      'N': 'das'
-    }
-    return articleMap[gender] || ''
-  }
+    setIsProcessing(true)
+    setError('')
+    setResults(null)
 
-  const handleSave = async () => {
-    setIsSaving(true)
     try {
-      const response = await fetch('/api/dictionary/update', {
+      // Parse JSON to validate it
+      const data = JSON.parse(jsonText)
+      
+      const response = await fetch('/api/dictionary/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editedEntry)
+        body: JSON.stringify({ entries: Array.isArray(data) ? data : [data] })
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        onUpdate(data.entry)
-        setIsEditing(false)
-      } else {
-        const error = await response.json()
-        alert('Fehler beim Speichern: ' + error.error)
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Import fehlgeschlagen')
       }
-    } catch (error) {
-      alert('Fehler beim Speichern: ' + error.message)
+
+      setResults(result)
+      
+      // Clear the input after successful import
+      if (result.imported > 0) {
+        setJsonText('')
+      }
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        setError('Ungültiges JSON-Format')
+      } else {
+        setError(err.message)
+      }
     } finally {
-      setIsSaving(false)
+      setIsProcessing(false)
     }
   }
 
-  const handleSearchInCorpus = () => {
-    window.open(`/corpus?search=${encodeURIComponent(entry.halunder_word)}`, '_blank')
+  const sampleJson = `[
+  {
+    "halunderWord": "Alerseelen",
+    "pronunciation": "a.larsédan",
+    "wordType": "proper noun",
+    "germanMeaning": "Allerseelen, der 2. November",
+    "references": "S. Alerhilligen",
+    "relatedWords": ["Alerhilligen"]
   }
+]`
 
   return (
-    <div style={{ padding: '20px' }}>
-      {/* Header with title and buttons */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'flex-start',
-        marginBottom: '20px'
-      }}>
-        <div>
-          <h2 style={{ margin: '0 0 5px 0', color: '#2c3e50' }}>
-            {entry.halunder_word}
-            {entry.pronunciation && (
-              <span style={{ 
-                fontSize: '18px', 
-                color: '#666', 
-                marginLeft: '10px',
-                fontStyle: 'italic'
-              }}>
-                [{entry.pronunciation}]
-              </span>
-            )}
-          </h2>
-          <div style={{ fontSize: '16px', color: '#666' }}>
-            {entry.word_type && getWordTypeLabel(entry.word_type)}
-            {entry.word_gender && ` (${getArticle(entry.word_gender)})`}
-          </div>
-        </div>
-        
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button
-            onClick={handleSearchInCorpus}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#17a2b8',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            Im Corpus suchen
-          </button>
-          
-          {isEditing ? (
-            <>
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: '#28a745',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: isSaving ? 'not-allowed' : 'pointer',
-                  opacity: isSaving ? 0.6 : 1
-                }}
-              >
-                {isSaving ? 'Speichern...' : 'Speichern'}
-              </button>
-              <button
-                onClick={() => {
-                  setEditedEntry(entry)
-                  setIsEditing(false)
-                }}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: '#6c757d',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer'
-                }}
-              >
-                Abbrechen
-              </button>
-            </>
-          ) : (
+    <>
+      <Navbar />
+      <div className="container">
+        <div className="page-content">
+          <div style={{ marginBottom: '30px' }}>
+            <h1>Wörterbuch Import</h1>
             <button
-              onClick={() => setIsEditing(true)}
+              onClick={() => router.push('/dictionary')}
               style={{
-                padding: '8px 16px',
-                backgroundColor: '#007bff',
+                padding: '10px 20px',
+                backgroundColor: '#6c757d',
                 color: 'white',
                 border: 'none',
                 borderRadius: '4px',
                 cursor: 'pointer'
               }}
             >
-              Bearbeiten
+              ← Zurück zum Wörterbuch
             </button>
+          </div>
+
+          <div style={{ marginBottom: '20px' }}>
+            <h2>JSON-Daten importieren</h2>
+            <p>Fügen Sie Ihre Wörterbuch-Einträge im JSON-Format ein:</p>
+          </div>
+
+          {error && (
+            <div style={{
+              padding: '15px',
+              backgroundColor: '#f8d7da',
+              color: '#721c24',
+              borderRadius: '4px',
+              marginBottom: '20px'
+            }}>
+              {error}
+            </div>
           )}
-        </div>
-      </div>
 
-      {/* German Translation */}
-      <div style={{ 
-        marginBottom: '25px',
-        padding: '15px',
-        backgroundColor: '#f8f9fa',
-        borderRadius: '8px'
-      }}>
-        <h3 style={{ margin: '0 0 10px 0', fontSize: '16px', color: '#495057' }}>
-          Deutsche Übersetzung
-        </h3>
-        {isEditing ? (
-          <input
-            type="text"
-            value={editedEntry.german_word || ''}
-            onChange={(e) => setEditedEntry({...editedEntry, german_word: e.target.value})}
-            style={{
-              width: '100%',
-              padding: '8px',
-              fontSize: '16px',
-              border: '1px solid #ddd',
-              borderRadius: '4px'
-            }}
-          />
-        ) : (
-          <div style={{ fontSize: '18px', fontWeight: '500' }}>
-            {entry.german_word || 'Keine Übersetzung vorhanden'}
+          {results && (
+            <div style={{
+              padding: '15px',
+              backgroundColor: results.imported > 0 ? '#d4edda' : '#fff3cd',
+              color: results.imported > 0 ? '#155724' : '#856404',
+              borderRadius: '4px',
+              marginBottom: '20px'
+            }}>
+              <h3>Import-Ergebnisse:</h3>
+              <ul style={{ margin: '10px 0' }}>
+                <li>Importiert: {results.imported}</li>
+                <li>Übersprungen: {results.skipped}</li>
+                <li>Fehler: {results.errors}</li>
+              </ul>
+              {results.details && results.details.length > 0 && (
+                <details style={{ marginTop: '10px' }}>
+                  <summary style={{ cursor: 'pointer' }}>Details anzeigen</summary>
+                  <pre style={{ marginTop: '10px', fontSize: '12px' }}>
+                    {JSON.stringify(results.details, null, 2)}
+                  </pre>
+                </details>
+              )}
+            </div>
+          )}
+
+          <div style={{ marginBottom: '20px' }}>
+            <textarea
+              value={jsonText}
+              onChange={(e) => setJsonText(e.target.value)}
+              placeholder="JSON hier einfügen..."
+              style={{
+                width: '100%',
+                height: '400px',
+                padding: '10px',
+                fontFamily: 'monospace',
+                fontSize: '14px',
+                border: '1px solid #ddd',
+                borderRadius: '4px'
+              }}
+            />
           </div>
-        )}
-      </div>
 
-      {/* Meanings */}
-      {entry.dictionary_meanings && entry.dictionary_meanings.length > 0 && (
-        <div style={{ marginBottom: '25px' }}>
-          <h3 style={{ marginBottom: '15px', color: '#2c3e50' }}>Bedeutungen</h3>
-          {entry.dictionary_meanings
-            .sort((a, b) => a.meaning_number - b.meaning_number)
-            .map((meaning, index) => (
-              <div 
-                key={meaning.id} 
-                style={{ 
-                  marginBottom: '15px',
-                  padding: '15px',
-                  backgroundColor: '#f8f9fa',
-                  borderRadius: '8px',
-                  borderLeft: '4px solid #007bff'
-                }}
-              >
-                <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>
-                  {meaning.meaning_number || index + 1}.
-                </div>
-                <div style={{ marginBottom: '8px' }}>
-                  {meaning.definition}
-                </div>
-                {meaning.context && (
-                  <div style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
-                    Kontext: {meaning.context}
-                  </div>
-                )}
-                {meaning.usage_notes && (
-                  <div style={{ fontSize: '14px', color: '#666', marginTop: '5px' }}>
-                    Hinweise: {meaning.usage_notes}
-                  </div>
-                )}
-              </div>
-            ))}
-        </div>
-      )}
+          <div style={{ marginBottom: '20px' }}>
+            <button
+              onClick={handleImport}
+              disabled={isProcessing || !jsonText.trim()}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: isProcessing || !jsonText.trim() ? '#ccc' : '#28a745',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: isProcessing || !jsonText.trim() ? 'not-allowed' : 'pointer',
+                marginRight: '10px'
+              }}
+            >
+              {isProcessing ? 'Importiere...' : 'Importieren'}
+            </button>
 
-      {/* Additional Information */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-        {/* Etymology */}
-        {entry.etymology && (
-          <div style={{ 
-            padding: '15px',
-            backgroundColor: '#fff3cd',
-            borderRadius: '8px',
-            border: '1px solid #ffeaa7'
+            <button
+              onClick={() => setJsonText(sampleJson)}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#17a2b8',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              Beispiel-JSON laden
+            </button>
+          </div>
+
+          <div style={{
+            padding: '20px',
+            backgroundColor: '#f8f9fa',
+            borderRadius: '4px'
           }}>
-            <h4 style={{ margin: '0 0 10px 0', color: '#856404' }}>Etymologie</h4>
-            <p style={{ margin: 0, color: '#856404' }}>{entry.etymology}</p>
+            <h3>JSON-Format</h3>
+            <p>Jeder Eintrag sollte folgende Felder enthalten:</p>
+            <ul>
+              <li><strong>halunderWord</strong> (erforderlich): Das Halunder-Wort</li>
+              <li><strong>germanMeaning</strong> (erforderlich): Die deutsche Übersetzung</li>
+              <li><strong>pronunciation</strong>: Lautschrift</li>
+              <li><strong>wordType</strong>: Wortart (noun, verb, adjective, etc.)</li>
+              <li><strong>wordGender</strong>: Geschlecht (M, F, N) für Substantive</li>
+              <li><strong>etymology</strong>: Etymologie</li>
+              <li><strong>usageNotes</strong>: Verwendungshinweise</li>
+              <li><strong>source</strong>: Quelle</li>
+            </ul>
+            
+            <h4 style={{ marginTop: '20px' }}>Beispiel:</h4>
+            <pre style={{
+              backgroundColor: '#fff',
+              padding: '10px',
+              borderRadius: '4px',
+              overflow: 'auto'
+            }}>
+{sampleJson}
+            </pre>
           </div>
-        )}
-
-        {/* Usage Notes */}
-        {entry.usage_notes && (
-          <div style={{ 
-            padding: '15px',
-            backgroundColor: '#d1ecf1',
-            borderRadius: '8px',
-            border: '1px solid #bee5eb'
-          }}>
-            <h4 style={{ margin: '0 0 10px 0', color: '#0c5460' }}>Verwendungshinweise</h4>
-            <p style={{ margin: 0, color: '#0c5460' }}>{entry.usage_notes}</p>
-          </div>
-        )}
-      </div>
-
-      {/* Source */}
-      {entry.source && (
-        <div style={{ 
-          marginTop: '20px',
-          padding: '10px',
-          backgroundColor: '#e9ecef',
-          borderRadius: '4px',
-          fontSize: '14px',
-          color: '#495057'
-        }}>
-          <strong>Quelle:</strong> {entry.source}
         </div>
-      )}
-
-      {/* Metadata */}
-      <div style={{ 
-        marginTop: '20px',
-        paddingTop: '20px',
-        borderTop: '1px solid #dee2e6',
-        fontSize: '12px',
-        color: '#6c757d'
-      }}>
-        {entry.created_at && (
-          <div>Erstellt: {new Date(entry.created_at).toLocaleDateString('de-DE')}</div>
-        )}
-        {entry.updated_at && (
-          <div>Aktualisiert: {new Date(entry.updated_at).toLocaleDateString('de-DE')}</div>
-        )}
       </div>
-    </div>
+    </>
   )
 }
