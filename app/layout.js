@@ -1,12 +1,14 @@
+import './globals.css'
+
+export const metadata = {
+  title: 'Halunder Corpus Management System',
+  description: 'Manage and analyze Halunder language corpus data',
+}
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>
-        <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-          <h1>Halunder Corpus Manager</h1>
-          {children}
-        </div>
-      </body>
+      <body>{children}</body>
     </html>
   )
 }
