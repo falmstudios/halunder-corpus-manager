@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import Navbar from '../components/Navbar'
-import DictionarySearch from './DictionarySearch'
 import DictionaryEntry from './DictionaryEntry'
 import AlphabetSidebar from './AlphabetSidebar'
 import AddEntryModal from './AddEntryModal'
@@ -13,7 +12,6 @@ export default function DictionaryPage() {
   const [selectedEntry, setSelectedEntry] = useState(null)
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  const [searchType, setSearchType] = useState('both')
   const [selectedLetter, setSelectedLetter] = useState(null)
   const [showAddForm, setShowAddForm] = useState(false)
 
@@ -51,9 +49,9 @@ export default function DictionaryPage() {
       let url = '/api/dictionary/search?'
       
       if (searchTerm) {
-        url += `q=${encodeURIComponent(searchTerm)}&type=${searchType}`
+        url += `q=${encodeURIComponent(searchTerm)}`
       } else if (selectedLetter) {
-        url += `q=${selectedLetter}&type=halunder`
+        url += `letter=${selectedLetter}`
       }
       
       const response = await fetch(url)
@@ -67,7 +65,7 @@ export default function DictionaryPage() {
     } finally {
       setLoading(false)
     }
-  }, [searchTerm, searchType, selectedLetter])
+  }, [searchTerm, selectedLetter])
 
   useEffect(() => {
     loadEntries()
@@ -94,9 +92,8 @@ export default function DictionaryPage() {
     }
   }
 
-  const handleSearch = (term, type) => {
+  const handleSearch = (term) => {
     setSearchTerm(term)
-    setSearchType(type)
     setSelectedLetter(null)
   }
 
@@ -130,13 +127,37 @@ export default function DictionaryPage() {
           }}>
             <h1 style={{ margin: '0 0 20px 0' }}>Halunder Wörterbuch</h1>
             
-            <DictionarySearch 
-              onSearch={handleSearch}
-              searchTerm={searchTerm}
-              searchType={searchType}
-            />
+            {/* Simplified Search */}
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+              <input
+                type="text"
+                placeholder="Suche nach Wörtern..."
+                value={searchTerm}
+                onChange={(e) => handleSearch(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  fontSize: '16px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px'
+                }}
+              />
+              <button
+                onClick={() => handleSearch(searchTerm)}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#007bff',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Suchen
+              </button>
+            </div>
             
-            <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '10px' }}>
               <button
                 onClick={() => setShowAddForm(true)}
                 style={{
