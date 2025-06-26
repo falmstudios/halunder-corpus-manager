@@ -194,7 +194,6 @@ export default function CorpusViewer() {
   if (selectedBucket !== 'all') {
     loadQualitySentences()
   }
-}
       } else {
         alert('Fehler: ' + data.error)
       }
