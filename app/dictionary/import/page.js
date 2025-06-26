@@ -114,7 +114,7 @@ export default function DictionaryImportPage() {
                 marginTop: '20px',
                 padding: '16px',
                 backgroundColor: '#d1fae5',
-                border: '1px solid '#a7f3d0',
+                border: '1px solid #a7f3d0',
                 borderRadius: '6px'
               }}>
                 <p style={{ color: '#059669', fontWeight: 'bold', margin: 0 }}>
