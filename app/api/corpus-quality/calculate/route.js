@@ -76,6 +76,33 @@ function determineQualityBucket(tags) {
   return 'needs_review'
 }
 
+// Function to fetch all rows bypassing the 1000 row limit
+async function fetchAllRows(query, pageSize = 1000) {
+  let allData = []
+  let rangeStart = 0
+  let hasMore = true
+  
+  while (hasMore) {
+    const { data, error } = await query
+      .range(rangeStart, rangeStart + pageSize - 1)
+      
+    if (error) {
+      console.error('Error fetching batch:', error)
+      throw error
+    }
+    
+    if (data && data.length > 0) {
+      allData = allData.concat(data)
+      rangeStart += pageSize
+      hasMore = data.length === pageSize
+    } else {
+      hasMore = false
+    }
+  }
+  
+  return allData
+}
+
 export async function POST(request) {
   try {
     const body = await request.json()
@@ -83,36 +110,31 @@ export async function POST(request) {
     
     console.log('Calculating quality metrics for:', { textId, sentenceIds, forceRecalculate })
     
-    // Build query - get ALL sentences that need processing
-    let query = supabase
+    // Build base query
+    let baseQuery = supabase
       .from('parallel_corpus')
       .select('id, halunder_sentence, german_sentence, quality_bucket')
     
     // Only get sentences that need calculation
     if (!forceRecalculate) {
-      query = query.or('quality_bucket.is.null,quality_bucket.eq.unreviewed')
+      baseQuery = baseQuery.or('quality_bucket.is.null,quality_bucket.eq.unreviewed')
     } else {
       // If force recalculate, get unreviewed sentences
-      query = query.or('quality_bucket.is.null,quality_bucket.eq.unreviewed')
+      baseQuery = baseQuery.or('quality_bucket.is.null,quality_bucket.eq.unreviewed')
     }
     
     // Filter by text ID if provided
     if (textId) {
-      query = query.eq('source_text_id', textId)
+      baseQuery = baseQuery.eq('source_text_id', textId)
     }
     
     // Filter by specific sentence IDs if provided
     if (sentenceIds && sentenceIds.length > 0) {
-      query = query.in('id', sentenceIds)
+      baseQuery = baseQuery.in('id', sentenceIds)
     }
     
-    // Get ALL matching sentences, not just 1000
-    const { data: sentences, error: fetchError } = await query.limit(10000)
-    
-    if (fetchError) {
-      console.error('Error fetching sentences:', fetchError)
-      return Response.json({ error: fetchError.message }, { status: 500 })
-    }
+    // Fetch ALL sentences using pagination
+    const sentences = await fetchAllRows(baseQuery)
     
     if (!sentences || sentences.length === 0) {
       return Response.json({ 
@@ -121,7 +143,7 @@ export async function POST(request) {
       }, { status: 200 })
     }
     
-    console.log(`Processing ${sentences.length} sentences...`)
+    console.log(`Processing ${sentences.length} sentences (fetched all using pagination)...`)
     
     // Calculate metrics for each sentence
     const updates = sentences.map(sentence => {
@@ -191,7 +213,9 @@ export async function POST(request) {
         }
       })
       
-      console.log(`Updated ${totalUpdated} of ${updates.length} sentences...`)
+      if (i % 500 === 0) {
+        console.log(`Updated ${totalUpdated} of ${updates.length} sentences...`)
+      }
     }
     
     // Get summary statistics from successful updates
@@ -201,9 +225,12 @@ export async function POST(request) {
     }, {})
     
     console.log('Final bucket distribution:', bucketCounts)
+    console.log('Total sentences found:', sentences.length)
+    console.log('Total sentences updated:', totalUpdated)
     
     return Response.json({ 
       message: 'Quality metrics calculated successfully',
+      totalFound: sentences.length,
       processed: updates.length,
       updated: totalUpdated,
       bucketCounts,
@@ -220,26 +247,32 @@ export async function POST(request) {
 
 export async function GET(request) {
   try {
-    // Get count of sentences without quality metrics or in unreviewed
-    const { data, error, count } = await supabase
+    // Get count using Supabase count functionality (no 1000 limit)
+    const { count: unreviewedCount, error: countError } = await supabase
       .from('parallel_corpus')
-      .select('id', { count: 'exact', head: true })
+      .select('*', { count: 'exact', head: true })
       .or('quality_bucket.is.null,quality_bucket.eq.unreviewed')
     
-    if (error) {
-      console.error('Error checking uncalculated sentences:', error)
-      return Response.json({ error: error.message }, { status: 500 })
+    if (countError) {
+      console.error('Error checking uncalculated sentences:', countError)
+      return Response.json({ error: countError.message }, { status: 500 })
     }
     
     // Get total count
-    const { count: totalCount } = await supabase
+    const { count: totalCount, error: totalError } = await supabase
       .from('parallel_corpus')
-      .select('id', { count: 'exact', head: true })
+      .select('*', { count: 'exact', head: true })
     
-    // Get current bucket distribution
-    const { data: allSentences, error: bucketError } = await supabase
+    if (totalError) {
+      console.error('Error getting total count:', totalError)
+    }
+    
+    // Get bucket distribution - fetch ALL rows
+    const allSentencesQuery = supabase
       .from('parallel_corpus')
       .select('quality_bucket')
+    
+    const allSentences = await fetchAllRows(allSentencesQuery)
     
     let bucketCounts = {
       high_quality: 0,
@@ -251,19 +284,21 @@ export async function GET(request) {
       rejected: 0
     }
     
-    if (allSentences) {
-      allSentences.forEach(row => {
-        const bucket = row.quality_bucket || 'unreviewed'
-        if (bucket in bucketCounts) {
-          bucketCounts[bucket]++
-        }
-      })
-    }
+    allSentences.forEach(row => {
+      const bucket = row.quality_bucket || 'unreviewed'
+      if (bucket in bucketCounts) {
+        bucketCounts[bucket]++
+      }
+    })
+    
+    console.log('Total sentences:', totalCount)
+    console.log('Unreviewed sentences:', unreviewedCount)
+    console.log('Bucket distribution:', bucketCounts)
     
     return Response.json({
       totalSentences: totalCount || 0,
-      uncalculatedSentences: count || 0,
-      calculatedSentences: (totalCount || 0) - (count || 0),
+      uncalculatedSentences: unreviewedCount || 0,
+      calculatedSentences: (totalCount || 0) - (unreviewedCount || 0),
       bucketCounts
     }, { status: 200 })
     
