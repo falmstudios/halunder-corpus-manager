@@ -7,94 +7,100 @@ const supabase = createClient(
 
 export async function GET(request) {
   try {
-    // Get all unique quality buckets and their counts
-    const { data, error } = await supabase
+    // Get all sentences with their buckets
+    const { data: allSentences, error } = await supabase
       .from('parallel_corpus')
       .select('quality_bucket')
-      .not('quality_bucket', 'is', null)
     
     if (error) {
-      console.error('Error fetching buckets:', error)
+      console.error('Error fetching bucket data:', error)
       return Response.json({ error: error.message }, { status: 500 })
     }
     
-    // Count sentences in each bucket
-    const bucketCounts = data.reduce((acc, item) => {
-      const bucket = item.quality_bucket
-      acc[bucket] = (acc[bucket] || 0) + 1
-      return acc
-    }, {})
+    // Initialize bucket counts
+    const bucketCounts = {
+      high_quality: 0,
+      good_quality: 0,
+      needs_review: 0,
+      poor_quality: 0,
+      unreviewed: 0,
+      approved: 0,
+      rejected: 0
+    }
+    
+    // Count sentences per bucket
+    allSentences.forEach(row => {
+      const bucket = row.quality_bucket || 'unreviewed'
+      if (bucket in bucketCounts) {
+        bucketCounts[bucket]++
+      } else {
+        // Handle any unexpected bucket values
+        console.warn('Unknown bucket:', bucket)
+      }
+    })
     
     // Define bucket metadata
-    const buckets = [
-      {
-        key: 'high_quality',
-        label: 'High Quality',
+    const bucketMetadata = {
+      high_quality: {
+        label: 'Hohe Qualität',
         color: '#28a745',
-        description: 'Similar length and punctuation',
-        count: bucketCounts.high_quality || 0
+        description: 'Ähnliche Länge und Interpunktion'
       },
-      {
-        key: 'good_quality',
-        label: 'Good Quality',
+      good_quality: {
+        label: 'Gute Qualität',
         color: '#90EE90',
-        description: 'Similar length or punctuation',
-        count: bucketCounts.good_quality || 0
+        description: 'Entweder ähnliche Länge oder Interpunktion'
       },
-      {
-        key: 'needs_review',
-        label: 'Needs Review',
+      needs_review: {
+        label: 'Überprüfung erforderlich',
         color: '#ffc107',
-        description: 'Some differences detected',
-        count: bucketCounts.needs_review || 0
+        description: 'Moderate Unterschiede'
       },
-      {
-        key: 'poor_quality',
-        label: 'Poor Quality',
+      poor_quality: {
+        label: 'Schlechte Qualität',
         color: '#dc3545',
-        description: 'Major differences in length and punctuation',
-        count: bucketCounts.poor_quality || 0
+        description: 'Große Unterschiede in Länge und Interpunktion'
       },
-      {
-        key: 'unreviewed',
-        label: 'Unreviewed',
+      unreviewed: {
+        label: 'Unbewertet',
         color: '#6c757d',
-        description: 'Not yet reviewed by human',
-        count: bucketCounts.unreviewed || 0
+        description: 'Noch nicht bewertet'
+      },
+      approved: {
+        label: 'Genehmigt',
+        color: '#17a2b8',
+        description: 'Manuell überprüft und genehmigt'
+      },
+      rejected: {
+        label: 'Abgelehnt',
+        color: '#343a40',
+        description: 'Manuell überprüft und abgelehnt'
       }
-    ]
-    
-    // Get total count including null buckets
-    const { count: totalCount, error: countError } = await supabase
-      .from('parallel_corpus')
-      .select('*', { count: 'exact', head: true })
-    
-    if (countError) {
-      console.error('Error getting total count:', countError)
     }
     
-    // Get unprocessed count (null quality_bucket)
-    const { count: unprocessedCount, error: unprocessedError } = await supabase
-      .from('parallel_corpus')
-      .select('*', { count: 'exact', head: true })
-      .is('quality_bucket', null)
+    // Build response with counts and metadata
+    const buckets = Object.entries(bucketMetadata).map(([key, meta]) => ({
+      key,
+      ...meta,
+      count: bucketCounts[key]
+    }))
     
-    if (unprocessedError) {
-      console.error('Error getting unprocessed count:', unprocessedError)
-    }
+    // Calculate total
+    const totalCount = Object.values(bucketCounts).reduce((sum, count) => sum + count, 0)
+    
+    console.log('Bucket distribution:', bucketCounts)
+    console.log('Total sentences:', totalCount)
     
     return Response.json({
       buckets,
-      totalProcessed: Object.values(bucketCounts).reduce((sum, count) => sum + count, 0),
-      totalSentences: totalCount || 0,
-      unprocessedCount: unprocessedCount || 0
-    })
+      totalCount,
+      bucketCounts
+    }, { status: 200 })
     
   } catch (error) {
-    console.error('Error fetching bucket data:', error)
-    return Response.json(
-      { error: 'Failed to fetch bucket data' },
-      { status: 500 }
-    )
+    console.error('Error in buckets endpoint:', error)
+    return Response.json({ 
+      error: error.message || 'Failed to fetch bucket data' 
+    }, { status: 500 })
   }
 }
