@@ -1,177 +1,124 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import Navbar from '@/app/Navbar'
 
 export default function DictionaryImportPage() {
   const [importing, setImporting] = useState(false)
-  const [file, setFile] = useState(null)
-  const [source, setSource] = useState('krogmann')
-  const [result, setResult] = useState(null)
-  const router = useRouter()
+  const [results, setResults] = useState(null)
+  const [error, setError] = useState(null)
 
-  const handleImport = async () => {
-    if (!file) {
-      alert('Bitte wähle eine Datei aus')
-      return
-    }
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0]
+    if (!file) return
 
     setImporting(true)
-    setResult(null)
+    setError(null)
+    setResults(null)
 
     try {
       const text = await file.text()
-      const data = JSON.parse(text)
-      
-      // Determine format and extract entries
-      let entries = []
-      
-      if (data.entries) {
-        // Krogmann format
-        entries = data.entries
-      } else if (data.dictionaryEntries) {
-        // Other format
-        entries = data.dictionaryEntries
-      } else if (Array.isArray(data)) {
-        entries = data
-      }
+      const entries = JSON.parse(text)
 
-      const response = await fetch('/api/dictionary/import', {
+      const response = await fetch('/api/dictionary/krogmann-import', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          entries,
-          source
-        })
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ entries, source: 'Krogmann' })
       })
 
-      const result = await response.json()
-      setResult(result)
+      const data = await response.json()
 
-    } catch (error) {
-      console.error('Import error:', error)
-      alert('Fehler beim Import: ' + error.message)
+      if (!response.ok) {
+        throw new Error(data.error || 'Import failed')
+      }
+
+      setResults(data)
+    } catch (err) {
+      setError(err.message)
     } finally {
       setImporting(false)
     }
   }
 
   return (
-    <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
-      <div style={{ marginBottom: '20px' }}>
-        <button
-          onClick={() => router.push('/dictionary')}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#6c757d',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
-        >
-          ← Zurück zum Wörterbuch
-        </button>
-      </div>
-
-      <h1>Wörterbuch importieren</h1>
-      
-      <div style={{
-        padding: '20px',
-        border: '1px solid #ddd',
-        borderRadius: '8px',
-        backgroundColor: '#f8f9fa',
-        marginBottom: '20px'
-      }}>
-        <h3>Unterstützte Formate:</h3>
-        <ul>
-          <li><strong>Krogmann:</strong> Halunder → Deutsch (aus Docupipe)</li>
-          <li><strong>Siebs:</strong> Deutsch → Halunder (aus Docupipe)</li>
-          <li><strong>Custom JSON:</strong> Eigenes Format</li>
-        </ul>
-      </div>
-
-      <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>
-          Quelle auswählen:
-        </label>
-        <select
-          value={source}
-          onChange={(e) => setSource(e.target.value)}
-          style={{
-            width: '100%',
-            padding: '10px',
-            border: '1px solid #ddd',
-            borderRadius: '4px',
-            fontSize: '16px'
-          }}
-        >
-          <option value="krogmann">Krogmann Wörterbuch</option>
-          <option value="siebs">Siebs Wörterbuch</option>
-          <option value="corpus">Aus Corpus</option>
-          <option value="manual">Manuell/Custom</option>
-        </select>
-      </div>
-
-      <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>
-          JSON-Datei auswählen:
-        </label>
-        <input
-          type="file"
-          accept=".json"
-          onChange={(e) => setFile(e.target.files[0])}
-          style={{
-            width: '100%',
-            padding: '10px',
-            border: '1px solid #ddd',
-            borderRadius: '4px'
-          }}
-        />
-      </div>
-
-      <button
-        onClick={handleImport}
-        disabled={importing || !file}
-        style={{
-          padding: '12px 24px',
-          backgroundColor: importing ? '#ccc' : '#28a745',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: importing ? 'not-allowed' : 'pointer',
-          fontSize: '16px',
-          fontWeight: 'bold'
-        }}
-      >
-        {importing ? 'Importiere...' : 'Import starten'}
-      </button>
-
-      {result && (
-        <div style={{
-          marginTop: '30px',
-          padding: '20px',
-          backgroundColor: result.errors?.length > 0 ? '#fff3cd' : '#d4edda',
-          border: `1px solid ${result.errors?.length > 0 ? '#ffeaa7' : '#c3e6cb'}`,
-          borderRadius: '8px'
-        }}>
-          <h3>Import abgeschlossen!</h3>
-          <p><strong>Verarbeitet:</strong> {result.processed} von {result.total} Einträgen</p>
+    <>
+      <Navbar />
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold mb-8">Krogmann Dictionary Import</h1>
+        
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4">Upload Dictionary JSON File</h2>
           
-          {result.errors?.length > 0 && (
-            <div style={{ marginTop: '15px' }}>
-              <h4>Fehler:</h4>
-              <ul style={{ maxHeight: '200px', overflow: 'auto' }}>
-                {result.errors.map((error, index) => (
-                  <li key={index}>
-                    <strong>{error.word}:</strong> {error.error}
-                  </li>
-                ))}
-              </ul>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select a Krogmann dictionary JSON file
+            </label>
+            <input
+              type="file"
+              accept=".json"
+              onChange={handleFileUpload}
+              disabled={importing}
+              className="block w-full text-sm text-gray-500
+                file:mr-4 file:py-2 file:px-4
+                file:rounded-md file:border-0
+                file:text-sm file:font-semibold
+                file:bg-blue-50 file:text-blue-700
+                hover:file:bg-blue-100
+                disabled:opacity-50"
+            />
+          </div>
+
+          {importing && (
+            <div className="text-blue-600">
+              <div className="flex items-center">
+                <svg className="animate-spin h-5 w-5 mr-3" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Importing dictionary entries...
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-md">
+              <p className="text-red-800">Error: {error}</p>
+            </div>
+          )}
+
+          {results && (
+            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-md">
+              <p className="text-green-800 font-semibold">{results.message}</p>
+              <p className="text-green-700 mt-1">
+                Successfully imported: {results.processed} entries
+              </p>
+              {results.errors && results.errors.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-orange-700">Errors: {results.errors.length}</p>
+                  <ul className="text-sm text-orange-600 mt-1 max-h-40 overflow-y-auto">
+                    {results.errors.map((err, idx) => (
+                      <li key={idx}>{err.word}: {err.error}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
         </div>
-      )}
-    </div>
+
+        <div className="bg-gray-50 rounded-lg p-6">
+          <h3 className="font-semibold mb-2">Instructions:</h3>
+          <ol className="list-decimal list-inside space-y-1 text-sm text-gray-700">
+            <li>Select a JSON file containing Krogmann dictionary entries</li>
+            <li>The file should contain an array of dictionary entry objects</li>
+            <li>Each entry will be imported with all its meanings, examples, and related information</li>
+            <li>Duplicate entries will be skipped</li>
+            <li>After import, you can view and search entries in the main dictionary</li>
+          </ol>
+        </div>
+      </div>
+    </>
   )
 }
