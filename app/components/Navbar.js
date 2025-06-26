@@ -10,7 +10,6 @@ export default function Navbar() {
     { href: '/', label: 'Home' },
     { href: '/review', label: 'Text Review' },
     { href: '/corpus', label: 'Corpus' },
-    { href: '/corpus-review', label: 'Quality Review' },
     { href: '/dictionary', label: 'Dictionary' },
     { href: '/analyze', label: 'Analyze' },
     { href: '/editor', label: 'Table Editor' }
