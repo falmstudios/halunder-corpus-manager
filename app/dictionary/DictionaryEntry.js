@@ -1,95 +1,30 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 
 export default function DictionaryEntry({ entry, onUpdate }) {
   const [isEditing, setIsEditing] = useState(false)
-  const [editedEntry, setEditedEntry] = useState(entry)
-  const [meanings, setMeanings] = useState([])
+  const [meanings, setMeanings] = useState(entry.dictionary_meanings || [])
+  const [searchingCorpus, setSearchingCorpus] = useState(false)
   const [showCorpusSearch, setShowCorpusSearch] = useState(false)
   const [corpusSentences, setCorpusSentences] = useState([])
-  const [searchingCorpus, setSearchingCorpus] = useState(false)
-
-  // Initialize meanings from entry data
-  useEffect(() => {
-    if (entry) {
-      // Extract meanings from various sources
-      const extractedMeanings = []
-      
-      // From dictionary_meanings
-      if (entry.dictionary_meanings?.length > 0) {
-        entry.dictionary_meanings.forEach(m => {
-          if (m.german_meaning) {
-            extractedMeanings.push({
-              id: m.id,
-              text: m.german_meaning,
-              context: m.context
-            })
-          }
-        })
-      }
-      
-      // From german_word field
-      if (entry.german_word && !extractedMeanings.find(m => m.text === entry.german_word)) {
-        extractedMeanings.push({
-          id: 'main',
-          text: entry.german_word,
-          context: null
-        })
-      }
-      
-      // From additional_info if it contains numbered meanings
-      if (entry.additional_info && entry.additional_info.includes('1.')) {
-        const additionalMeanings = entry.additional_info.split(/\d+\.\s*/).filter(m => m.trim())
-        additionalMeanings.forEach((meaning, index) => {
-          if (!extractedMeanings.find(m => m.text === meaning.trim())) {
-            extractedMeanings.push({
-              id: `add_${index}`,
-              text: meaning.trim(),
-              context: null
-            })
-          }
-        })
-      }
-      
-      setMeanings(extractedMeanings.length > 0 ? extractedMeanings : [{ id: 'new', text: '', context: null }])
-      setEditedEntry(entry)
-    }
-  }, [entry])
-
-  // Reset when entry changes
-  useEffect(() => {
-    setIsEditing(false)
-    setShowCorpusSearch(false)
-  }, [entry?.id])
 
   const handleSave = async () => {
     try {
-      // Prepare meanings for saving
-      const germanWords = meanings.map(m => m.text).filter(t => t.trim())
-      const primaryGermanWord = germanWords[0] || ''
+      // Prepare meanings data
+      const meaningsToSave = meanings.filter(m => m.text && m.text.trim())
       
-      // Update the entry
-      const response = await fetch('/api/dictionary/entry', {
-        method: 'PUT',
+      const response = await fetch('/api/dictionary/update', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: editedEntry.id,
-          halunder_word: editedEntry.halunder_word,
-          german_word: primaryGermanWord,
-          pronunciation: editedEntry.pronunciation,
-          word_type: editedEntry.word_type,
-          gender: editedEntry.gender,
-          plural_form: editedEntry.plural_form,
-          etymology: editedEntry.etymology,
-          additional_info: editedEntry.additional_info,
-          meanings: meanings
+          id: entry.id,
+          halunder_word: entry.halunder_word,
+          meanings: meaningsToSave
         })
       })
       
       if (response.ok) {
-        const data = await response.json()
-        alert('Erfolgreich gespeichert!')
         // Reload to show updated data
         window.location.reload()
       } else {
@@ -168,9 +103,10 @@ export default function DictionaryEntry({ entry, onUpdate }) {
       
       if (response.ok) {
         alert('Beispiel erfolgreich hinzugefügt!')
-        setShowCorpusSearch(false)
-        // Reload to show new example
         window.location.reload()
+      } else {
+        const error = await response.json()
+        alert('Fehler: ' + (error.error || 'Unbekannter Fehler'))
       }
     } catch (error) {
       console.error('Failed to add example:', error)
@@ -178,263 +114,166 @@ export default function DictionaryEntry({ entry, onUpdate }) {
     }
   }
 
-  const getWordTypeLabel = (type) => {
-    const typeMap = {
-      'noun': 'Substantiv',
-      'verb': 'Verb',
-      'verb (weak)': 'Verb (schwach)',
-      'verb (strong)': 'Verb (stark)',
-      'adjective': 'Adjektiv',
-      'adverb': 'Adverb',
-      'pronoun': 'Pronomen',
-      'preposition': 'Präposition',
-      'conjunction': 'Konjunktion',
-      'interjection': 'Interjektion',
-      'numeral': 'Zahlwort',
-      'proper noun': 'Eigenname'
-    }
-    return typeMap[type] || type
-  }
-
-  const getArticle = (gender) => {
-    const articleMap = {
-      'M': 'der',
-      'F': 'die',
-      'N': 'das'
-    }
-    return articleMap[gender] || ''
-  }
-
-  if (!entry) return null
-
   return (
-    <div>
-      <div style={{ 
-        marginBottom: '30px',
-        borderBottom: '2px solid #e9ecef',
-        paddingBottom: '20px'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div style={{ flex: 1 }}>
-            <h2 style={{ margin: '0 0 10px 0', fontSize: '32px' }}>
-              {isEditing ? (
-                <input
-                  type="text"
-                  value={editedEntry.halunder_word}
-                  onChange={(e) => setEditedEntry({...editedEntry, halunder_word: e.target.value})}
-                  style={{ fontSize: '28px', padding: '4px', width: '100%' }}
-                />
-              ) : (
-                entry.halunder_word
-              )}
-            </h2>
-
-            {/* German translations */}
-            <div style={{ marginBottom: '15px' }}>
-              {isEditing ? (
-                <div>
-                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
-                    Deutsche Bedeutungen:
-                  </label>
-                  {meanings.map((meaning, index) => (
-                    <div key={meaning.id} style={{ display: 'flex', gap: '10px', marginBottom: '5px' }}>
-                      <input
-                        type="text"
-                        value={meaning.text}
-                        onChange={(e) => updateMeaning(index, e.target.value)}
-                        placeholder={`Bedeutung ${index + 1}`}
-                        style={{ 
-                          flex: 1, 
-                          padding: '6px', 
-                          fontSize: '16px',
-                          border: '1px solid #ddd',
-                          borderRadius: '4px'
-                        }}
-                      />
-                      {meanings.length > 1 && (
-                        <button
-                          onClick={() => removeMeaning(index)}
-                          style={{
-                            padding: '6px 12px',
-                            backgroundColor: '#dc3545',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  <button
-                    onClick={addMeaning}
-                    style={{
-                      marginTop: '5px',
-                      padding: '6px 12px',
-                      backgroundColor: '#28a745',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '14px'
-                    }}
-                  >
-                    + Bedeutung hinzufügen
-                  </button>
-                </div>
-              ) : (
-                meanings.filter(m => m.text.trim()).map((meaning, index) => (
-                  <div key={meaning.id} style={{ 
-                    fontSize: '20px', 
-                    color: '#495057', 
-                    marginBottom: '5px' 
-                  }}>
-                    = {meaning.text}
-                    {entry.gender && entry.word_type === 'noun' && index === 0 && (
-                      <span style={{ marginLeft: '8px' }}>
-                        , {getArticle(entry.gender)}
-                      </span>
-                    )}
-                  </div>
-                ))
-              )}
+    <div style={{ 
+      marginBottom: '30px', 
+      padding: '20px', 
+      backgroundColor: 'white',
+      borderRadius: '8px',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+    }}>
+      {/* Entry Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
+        <div style={{ flex: 1 }}>
+          <h3 style={{ margin: '0 0 5px 0', fontSize: '24px' }}>
+            {entry.halunder_word}
+            {entry.word_type && (
+              <span style={{ 
+                fontSize: '14px', 
+                marginLeft: '10px', 
+                color: '#6c757d',
+                fontStyle: 'italic' 
+              }}>
+                {entry.word_type}
+              </span>
+            )}
+          </h3>
+          {entry.pronunciation && (
+            <div style={{ fontSize: '14px', color: '#6c757d', marginBottom: '5px' }}>
+              [{entry.pronunciation}]
             </div>
-            
-            {entry.pronunciation && (
-              <div style={{ fontSize: '18px', color: '#666', marginBottom: '5px' }}>
-                [{entry.pronunciation}]
-              </div>
-            )}
-            
-            <div style={{ fontSize: '16px', color: '#495057', marginBottom: '5px' }}>
-              {getWordTypeLabel(entry.word_type)}
-              {entry.gender && entry.word_type === 'noun' && `, ${entry.gender === 'M' ? 'maskulin' : entry.gender === 'F' ? 'feminin' : 'neutral'}`}
-            </div>
-            
-            {entry.plural_form && (
-              <div style={{ fontSize: '14px', color: '#6c757d' }}>
-                Plural: {isEditing ? (
-                  <input
-                    type="text"
-                    value={editedEntry.plural_form}
-                    onChange={(e) => setEditedEntry({...editedEntry, plural_form: e.target.value})}
-                    style={{ marginLeft: '5px' }}
-                  />
-                ) : (
-                  entry.plural_form
-                )}
-                {entry.plural_pronunciation && ` [${entry.plural_pronunciation}]`}
-              </div>
-            )}
-          </div>
-          
-          <div style={{ display: 'flex', gap: '10px' }}>
-            {isEditing ? (
-              <>
-                <button
-                  onClick={handleSave}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: '#28a745',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Speichern
-                </button>
-                <button
-                  onClick={handleCancel}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: '#dc3545',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Abbrechen
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() => setIsEditing(true)}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: '#007bff',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Bearbeiten
-                </button>
-                <button
-                  onClick={searchCorpus}
-                  disabled={searchingCorpus}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: '#17a2b8',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    opacity: searchingCorpus ? 0.6 : 1
-                  }}
-                >
-                  {searchingCorpus ? 'Suche...' : 'Im Corpus suchen'}
-                </button>
-              </>
-            )}
-          </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          {!isEditing && (
+            <>
+              <button
+                onClick={searchCorpus}
+                disabled={searchingCorpus}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: '#17a2b8',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: searchingCorpus ? 'not-allowed' : 'pointer',
+                  opacity: searchingCorpus ? 0.6 : 1
+                }}
+              >
+                {searchingCorpus ? 'Suche...' : 'Im Corpus suchen'}
+              </button>
+              <button
+                onClick={() => setIsEditing(true)}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: '#007bff',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Bearbeiten
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Additional sections remain the same... */}
-      {/* Etymology */}
-      {entry.etymology && (
-        <div style={{
-          padding: '15px',
-          backgroundColor: '#f8f9fa',
-          borderRadius: '8px',
-          marginBottom: '20px'
-        }}>
-          <strong>Herkunft:</strong> {entry.etymology}
-        </div>
-      )}
+      {/* Meanings Section */}
+      <div style={{ marginBottom: '15px' }}>
+        <h4 style={{ marginBottom: '10px', color: '#495057' }}>Bedeutungen:</h4>
+        {isEditing ? (
+          <div>
+            {meanings.map((meaning, index) => (
+              <div key={meaning.id || index} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                <span style={{ width: '30px', textAlign: 'right', paddingTop: '5px' }}>
+                  {index + 1}.
+                </span>
+                <input
+                  type="text"
+                  value={meaning.text || ''}
+                  onChange={(e) => updateMeaning(index, e.target.value)}
+                  placeholder="Deutsche Bedeutung"
+                  style={{
+                    flex: 1,
+                    padding: '8px',
+                    border: '1px solid #ced4da',
+                    borderRadius: '4px'
+                  }}
+                />
+                {meanings.length > 1 && (
+                  <button
+                    onClick={() => removeMeaning(index)}
+                    style={{
+                      padding: '6px 12px',
+                      backgroundColor: '#dc3545',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Löschen
+                  </button>
+                )}
+              </div>
+            ))}
+            <button
+              onClick={addMeaning}
+              style={{
+                marginTop: '10px',
+                padding: '6px 12px',
+                backgroundColor: '#28a745',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              + Bedeutung hinzufügen
+            </button>
+          </div>
+        ) : (
+          <ol style={{ margin: '0', paddingLeft: '20px' }}>
+            {meanings.length > 0 ? (
+              meanings.map((meaning, index) => (
+                <li key={meaning.id || index} style={{ marginBottom: '5px' }}>
+                  {meaning.text}
+                  {meaning.context && (
+                    <span style={{ color: '#6c757d', fontSize: '14px', marginLeft: '5px' }}>
+                      ({meaning.context})
+                    </span>
+                  )}
+                </li>
+              ))
+            ) : (
+              <li style={{ color: '#6c757d', fontStyle: 'italic' }}>Keine Bedeutungen eingetragen</li>
+            )}
+          </ol>
+        )}
+      </div>
 
-      {/* Examples */}
-      {(entry.dictionary_examples?.length > 0) && (
-        <div style={{ marginBottom: '30px' }}>
-          <h3 style={{ marginBottom: '15px' }}>Beispiele</h3>
-          
+      {/* Examples Section */}
+      {entry.dictionary_examples && entry.dictionary_examples.length > 0 && (
+        <div style={{ marginBottom: '15px' }}>
+          <h4 style={{ marginBottom: '10px', color: '#495057' }}>Beispiele:</h4>
           {entry.dictionary_examples.map((example, index) => (
-            <div key={example.id || index} style={{
-              padding: '15px',
-              backgroundColor: '#fff',
-              border: '1px solid #ddd',
-              borderRadius: '8px',
-              marginBottom: '10px'
+            <div key={example.id || index} style={{ 
+              marginBottom: '10px', 
+              padding: '10px',
+              backgroundColor: '#f8f9fa',
+              borderRadius: '4px',
+              fontSize: '14px'
             }}>
-              <div style={{ marginBottom: '8px' }}>
+              <div style={{ marginBottom: '5px' }}>
                 <strong>Halunder:</strong> {example.halunder_sentence}
               </div>
-              <div>
+              <div style={{ marginBottom: '5px' }}>
                 <strong>Deutsch:</strong> {example.german_sentence}
               </div>
               {example.source_reference && (
-                <div style={{ 
-                  marginTop: '8px', 
-                  fontSize: '12px', 
-                  color: '#666',
-                  fontStyle: 'italic'
-                }}>
+                <div style={{ fontSize: '12px', color: '#6c757d' }}>
                   Quelle: {example.source_reference}
                 </div>
               )}
@@ -443,7 +282,67 @@ export default function DictionaryEntry({ entry, onUpdate }) {
         </div>
       )}
 
-      {/* Corpus Search Modal */}
+      {/* Additional Info */}
+      {(entry.etymology || entry.additional_info) && !isEditing && (
+        <div style={{ 
+          marginTop: '15px', 
+          paddingTop: '15px', 
+          borderTop: '1px solid #dee2e6',
+          fontSize: '14px',
+          color: '#6c757d'
+        }}>
+          {entry.etymology && (
+            <div style={{ marginBottom: '5px' }}>
+              <strong>Etymologie:</strong> {entry.etymology}
+            </div>
+          )}
+          {entry.additional_info && (
+            <div>
+              <strong>Zusätzliche Info:</strong> {entry.additional_info}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Edit Actions */}
+      {isEditing && (
+        <div style={{ 
+          display: 'flex', 
+          gap: '10px', 
+          marginTop: '20px',
+          paddingTop: '20px',
+          borderTop: '1px solid #dee2e6'
+        }}>
+          <button
+            onClick={handleSave}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#28a745',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            Speichern
+          </button>
+          <button
+            onClick={handleCancel}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#6c757d',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            Abbrechen
+          </button>
+        </div>
+      )}
+
+      {/* Corpus Search Results Modal */}
       {showCorpusSearch && (
         <div style={{
           position: 'fixed',
@@ -459,84 +358,81 @@ export default function DictionaryEntry({ entry, onUpdate }) {
         }}>
           <div style={{
             backgroundColor: 'white',
-            padding: '30px',
             borderRadius: '8px',
-            maxWidth: '900px',
-            width: '90%',
+            width: '80%',
+            maxWidth: '800px',
             maxHeight: '80vh',
+            overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column'
           }}>
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center',
-              marginBottom: '20px'
+            <div style={{
+              padding: '20px',
+              borderBottom: '1px solid #dee2e6',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
             }}>
-              <h3 style={{ margin: 0 }}>
-                Corpus-Suche für "{entry.halunder_word}"
-                {meanings.length > 0 && meanings[0].text && ` / "${meanings.map(m => m.text).filter(t => t).join(', ')}"`}
-              </h3>
+              <h3 style={{ margin: 0 }}>Corpus-Suchergebnisse</h3>
               <button
                 onClick={() => setShowCorpusSearch(false)}
                 style={{
-                  padding: '5px 15px',
+                  padding: '6px 12px',
                   backgroundColor: '#6c757d',
                   color: 'white',
                   border: 'none',
                   borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '20px'
+                  cursor: 'pointer'
                 }}
               >
-                ✕
+                Schließen
               </button>
             </div>
             
-            <div style={{ 
-              flex: 1, 
-              overflow: 'auto',
-              border: '1px solid #eee',
-              borderRadius: '4px',
-              padding: '10px'
+            <div style={{
+              flex: 1,
+              padding: '20px',
+              overflowY: 'auto'
             }}>
               {corpusSentences.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#666', padding: '40px' }}>
-                  Keine passenden Sätze im Corpus gefunden.
+                <p style={{ textAlign: 'center', color: '#6c757d' }}>
+                  Keine Sätze im Corpus gefunden.
                 </p>
               ) : (
-                <div>
-                  <p style={{ marginBottom: '15px', color: '#666' }}>
-                    {corpusSentences.length} Treffer gefunden:
-                  </p>
-                  {corpusSentences.map((sentence, index) => (
-                    <div key={index} style={{
-                      padding: '15px',
-                      border: '1px solid #ddd',
-                      borderRadius: '4px',
-                      marginBottom: '10px',
-                      backgroundColor: '#f8f9fa'
+                corpusSentences.map((sentence, index) => (
+                  <div key={sentence.id || index} style={{
+                    marginBottom: '15px',
+                    padding: '15px',
+                    backgroundColor: '#f8f9fa',
+                    borderRadius: '4px'
+                  }}>
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong>Halunder:</strong>
+                      <div 
+                        dangerouslySetInnerHTML={{ __html: sentence.halunder_highlighted || sentence.halunder_sentence }}
+                        style={{ marginTop: '4px' }}
+                      />
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong>Deutsch:</strong>
+                      <div 
+                        dangerouslySetInnerHTML={{ __html: sentence.german_highlighted || sentence.german_sentence }}
+                        style={{ marginTop: '4px' }}
+                      />
+                    </div>
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center',
+                      marginTop: '10px'
                     }}>
-                      <div style={{ marginBottom: '8px' }}>
-                        <strong>Halunder:</strong> 
-                        <span dangerouslySetInnerHTML={{ __html: sentence.halunder_highlighted }} />
-                      </div>
-                      <div style={{ marginBottom: '8px' }}>
-                        <strong>Deutsch:</strong> 
-                        <span dangerouslySetInnerHTML={{ __html: sentence.german_highlighted }} />
-                      </div>
-                      <div style={{ 
-                        fontSize: '12px', 
-                        color: '#666',
-                        fontStyle: 'italic',
-                        marginBottom: '8px'
-                      }}>
-                        Quelle: {sentence.source} {sentence.author && `(${sentence.author})`}
-                      </div>
+                      <span style={{ fontSize: '12px', color: '#6c757d' }}>
+                        {sentence.source} {sentence.author && `(${sentence.author})`}
+                      </span>
                       <button
                         onClick={() => addExampleFromCorpus(sentence)}
                         style={{
-                          padding: '5px 15px',
+                          padding: '4px 12px',
                           backgroundColor: '#28a745',
                           color: 'white',
                           border: 'none',
@@ -548,25 +444,13 @@ export default function DictionaryEntry({ entry, onUpdate }) {
                         Als Beispiel hinzufügen
                       </button>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))
               )}
             </div>
           </div>
         </div>
       )}
-
-      {/* Source info */}
-      <div style={{ 
-        marginTop: '30px',
-        paddingTop: '20px',
-        borderTop: '1px solid #ddd',
-        fontSize: '12px',
-        color: '#6c757d'
-      }}>
-        <div>Quelle: {entry.source}</div>
-        <div>Eingetragen: {new Date(entry.created_at).toLocaleDateString('de-DE')}</div>
-      </div>
     </div>
   )
 }
