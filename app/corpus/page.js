@@ -20,6 +20,10 @@ export default function CorpusViewer() {
   const [editingSentence, setEditingSentence] = useState(null)
   const [calculating, setCalculating] = useState(false)
   const [savingEdit, setSavingEdit] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [isSearching, setIsSearching] = useState(false)
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
 
   useEffect(() => {
     loadProcessedTexts()
@@ -31,17 +35,23 @@ export default function CorpusViewer() {
   useEffect(() => {
     // Clear selections when switching buckets
     setSelectedSentences(new Set())
+    setPage(1)
+    setSearchQuery('')
     
-    if (reviewMode && selectedBucket !== 'all') {
-      loadQualitySentences()
-    } else if (!reviewMode) {
+    if (reviewMode) {
+      if (selectedBucket === 'all') {
+        setQualitySentences([])
+      } else {
+        loadQualitySentences()
+      }
+    } else {
       if (selectedText) {
         loadCorpusData(selectedText.id)
       } else {
         loadAllCorpusData()
       }
     }
-  }, [selectedText, reviewMode, selectedBucket])
+  }, [selectedText, reviewMode, selectedBucket, page])
 
   const loadProcessedTexts = async () => {
     try {
@@ -114,29 +124,7 @@ export default function CorpusViewer() {
       const response = await fetch('/api/corpus-quality/buckets')
       const data = await response.json()
       if (response.ok) {
-        // Add unreviewed bucket to the list
-        const allBuckets = [
-          ...data.buckets,
-          {
-            key: 'unreviewed',
-            label: 'Unbewertet',
-            color: '#6c757d',
-            description: 'Noch nicht bewertet',
-            count: 0 // Will be updated separately
-          }
-        ]
-        
-        // Get unreviewed count
-        const unreviewedResponse = await fetch('/api/corpus-quality/sentences?bucket=unreviewed&limit=1')
-        if (unreviewedResponse.ok) {
-          const unreviewedData = await unreviewedResponse.json()
-          const unreviewedBucket = allBuckets.find(b => b.key === 'unreviewed')
-          if (unreviewedBucket) {
-            unreviewedBucket.count = unreviewedData.pagination.total || 0
-          }
-        }
-        
-        setBuckets(allBuckets)
+        setBuckets(data.buckets || [])
       }
     } catch (err) {
       console.error('Failed to load buckets:', err)
@@ -144,18 +132,45 @@ export default function CorpusViewer() {
   }
 
   const loadQualitySentences = async () => {
+    if (selectedBucket === 'all') return
+    
     setLoading(true)
     try {
-      const response = await fetch(`/api/corpus-quality/sentences?bucket=${selectedBucket}&limit=200`)
+      const response = await fetch(`/api/corpus-quality/sentences?bucket=${selectedBucket}&page=${page}&limit=50`)
       const data = await response.json()
       
       if (response.ok) {
         setQualitySentences(data.sentences)
+        setTotalPages(data.pagination.totalPages)
       }
     } catch (err) {
       console.error('Failed to load quality sentences:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const searchSentences = async () => {
+    if (!searchQuery.trim()) {
+      loadQualitySentences()
+      return
+    }
+    
+    setIsSearching(true)
+    setLoading(true)
+    try {
+      const response = await fetch(`/api/corpus-quality/search?q=${encodeURIComponent(searchQuery)}&bucket=${selectedBucket}&page=${page}`)
+      const data = await response.json()
+      
+      if (response.ok) {
+        setQualitySentences(data.sentences)
+        setTotalPages(data.pagination.totalPages)
+      }
+    } catch (err) {
+      console.error('Failed to search sentences:', err)
+    } finally {
+      setLoading(false)
+      setIsSearching(false)
     }
   }
 
@@ -174,7 +189,7 @@ export default function CorpusViewer() {
       
       const data = await response.json()
       if (response.ok) {
-        alert(`Erfolgreich ${data.processed} Sätze verarbeitet!`)
+        alert(`Erfolgreich ${data.updated} von ${data.processed} Sätzen verarbeitet!\n\nVerteilung:\n${Object.entries(data.bucketCounts).map(([k,v]) => `${k}: ${v}`).join('\n')}`)
         loadBuckets()
         if (selectedBucket !== 'all') {
           loadQualitySentences()
@@ -212,7 +227,11 @@ export default function CorpusViewer() {
       const data = await response.json()
       if (response.ok) {
         setEditingSentence(null)
-        loadQualitySentences()
+        if (searchQuery) {
+          searchSentences()
+        } else {
+          loadQualitySentences()
+        }
         loadBuckets()
       } else {
         alert('Fehler: ' + data.error)
@@ -238,7 +257,11 @@ export default function CorpusViewer() {
 
       const data = await response.json()
       if (response.ok) {
-        loadQualitySentences()
+        if (searchQuery) {
+          searchSentences()
+        } else {
+          loadQualitySentences()
+        }
         loadBuckets()
       } else {
         alert('Fehler: ' + data.error)
@@ -543,6 +566,8 @@ export default function CorpusViewer() {
               setSelectedBucket('all')
               setSelectedSentences(new Set())
               setEditingSentence(null)
+              setSearchQuery('')
+              setPage(1)
             }}
             style={{
               width: '100%',
@@ -586,6 +611,8 @@ export default function CorpusViewer() {
               onClick={() => {
                 setSelectedBucket('all')
                 setEditingSentence(null)
+                setSearchQuery('')
+                setPage(1)
               }}
               style={{
                 padding: '12px',
@@ -598,6 +625,9 @@ export default function CorpusViewer() {
               }}
             >
               <div style={{ fontWeight: 'bold' }}>Alle Sätze</div>
+              <div style={{ fontSize: '20px', margin: '5px 0' }}>
+                {buckets.reduce((sum, b) => sum + b.count, 0)}
+              </div>
               <div style={{ fontSize: '12px' }}>Gesamtübersicht</div>
             </div>
             
@@ -607,6 +637,8 @@ export default function CorpusViewer() {
                 onClick={() => {
                   setSelectedBucket(bucket.key)
                   setEditingSentence(null)
+                  setSearchQuery('')
+                  setPage(1)
                 }}
                 style={{
                   padding: '12px',
@@ -707,8 +739,13 @@ export default function CorpusViewer() {
                         backgroundColor: 'white',
                         borderRadius: '8px',
                         border: `2px solid ${bucket.color}`,
-                        textAlign: 'center'
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        transition: 'transform 0.2s'
                       }}
+                      onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                      onClick={() => setSelectedBucket(bucket.key)}
                     >
                       <h3 style={{ color: bucket.color, marginBottom: '10px' }}>{bucket.label}</h3>
                       <div style={{ fontSize: '36px', fontWeight: 'bold', marginBottom: '10px' }}>
@@ -717,22 +754,23 @@ export default function CorpusViewer() {
                       <div style={{ fontSize: '14px', color: '#6c757d' }}>
                         {bucket.description}
                       </div>
-                      <button
-                        onClick={() => setSelectedBucket(bucket.key)}
-                        style={{
-                          marginTop: '15px',
-                          padding: '8px 16px',
-                          backgroundColor: bucket.color,
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Anzeigen
-                      </button>
                     </div>
                   ))}
+                </div>
+                
+                <div style={{ 
+                  marginTop: '30px', 
+                  padding: '20px', 
+                  backgroundColor: '#f8f9fa', 
+                  borderRadius: '8px' 
+                }}>
+                  <h3>Statistiken</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+                    <div>Gesamt: {buckets.reduce((sum, b) => sum + b.count, 0)} Sätze</div>
+                    <div>Bewertet: {buckets.filter(b => b.key !== 'unreviewed').reduce((sum, b) => sum + b.count, 0)} Sätze</div>
+                    <div>Gute Qualität: {buckets.filter(b => ['high_quality', 'good_quality', 'approved'].includes(b.key)).reduce((sum, b) => sum + b.count, 0)} Sätze</div>
+                    <div>Problematisch: {buckets.filter(b => ['poor_quality', 'rejected'].includes(b.key)).reduce((sum, b) => sum + b.count, 0)} Sätze</div>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -741,13 +779,76 @@ export default function CorpusViewer() {
                   {buckets.find(b => b.key === selectedBucket)?.label || 'Sätze'}
                 </h2>
                 
+                {/* Search bar */}
+                <div style={{
+                  marginBottom: '20px',
+                  display: 'flex',
+                  gap: '10px'
+                }}>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        setPage(1)
+                        searchSentences()
+                      }
+                    }}
+                    placeholder="Sätze durchsuchen..."
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      borderRadius: '4px',
+                      border: '1px solid #ced4da'
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      setPage(1)
+                      searchSentences()
+                    }}
+                    disabled={isSearching}
+                    style={{
+                      padding: '10px 20px',
+                      backgroundColor: '#007bff',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: isSearching ? 'not-allowed' : 'pointer',
+                      opacity: isSearching ? 0.6 : 1
+                    }}
+                  >
+                    {isSearching ? 'Suche...' : 'Suchen'}
+                  </button>
+                  {searchQuery && (
+                    <button
+                      onClick={() => {
+                        setSearchQuery('')
+                        setPage(1)
+                        loadQualitySentences()
+                      }}
+                      style={{
+                        padding: '10px 20px',
+                        backgroundColor: '#6c757d',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Zurücksetzen
+                    </button>
+                  )}
+                </div>
+                
                 {loading ? (
                   <div style={{ textAlign: 'center', padding: '40px' }}>
                     Lade Sätze...
                   </div>
                 ) : qualitySentences.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '40px', color: '#6c757d' }}>
-                    Keine Sätze in diesem Bucket
+                    {searchQuery ? 'Keine Sätze gefunden.' : 'Keine Sätze in diesem Bucket'}
                   </div>
                 ) : (
                   <div>
@@ -802,7 +903,11 @@ export default function CorpusViewer() {
                                   if (response.ok) {
                                     setSelectedSentences(new Set())
                                     loadBuckets()
-                                    loadQualitySentences()
+                                    if (searchQuery) {
+                                      searchSentences()
+                                    } else {
+                                      loadQualitySentences()
+                                    }
                                   }
                                 } catch (err) {
                                   console.error('Failed to move sentences:', err)
@@ -840,6 +945,48 @@ export default function CorpusViewer() {
                         {renderQualitySentence(sentence)}
                       </div>
                     ))}
+                    
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'center',
+                        gap: '10px',
+                        marginTop: '30px'
+                      }}>
+                        <button
+                          onClick={() => setPage(Math.max(1, page - 1))}
+                          disabled={page === 1}
+                          style={{
+                            padding: '8px 16px',
+                            backgroundColor: page === 1 ? '#e9ecef' : '#007bff',
+                            color: page === 1 ? '#6c757d' : 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: page === 1 ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          Zurück
+                        </button>
+                        <span style={{ padding: '8px 16px' }}>
+                          Seite {page} von {totalPages}
+                        </span>
+                        <button
+                          onClick={() => setPage(Math.min(totalPages, page + 1))}
+                          disabled={page === totalPages}
+                          style={{
+                            padding: '8px 16px',
+                            backgroundColor: page === totalPages ? '#e9ecef' : '#007bff',
+                            color: page === totalPages ? '#6c757d' : 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: page === totalPages ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          Weiter
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
