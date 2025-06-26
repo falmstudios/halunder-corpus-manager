@@ -83,13 +83,16 @@ export async function POST(request) {
     
     console.log('Calculating quality metrics for:', { textId, sentenceIds, forceRecalculate })
     
-    // Build query
+    // Build query - get ALL sentences that need processing
     let query = supabase
       .from('parallel_corpus')
       .select('id, halunder_sentence, german_sentence, quality_bucket')
     
-    // If not force recalculate, only get sentences without quality metrics
+    // Only get sentences that need calculation
     if (!forceRecalculate) {
+      query = query.or('quality_bucket.is.null,quality_bucket.eq.unreviewed')
+    } else {
+      // If force recalculate, get unreviewed sentences
       query = query.or('quality_bucket.is.null,quality_bucket.eq.unreviewed')
     }
     
@@ -103,8 +106,8 @@ export async function POST(request) {
       query = query.in('id', sentenceIds)
     }
     
-    // Fetch sentences
-    const { data: sentences, error: fetchError } = await query
+    // Get ALL matching sentences, not just 1000
+    const { data: sentences, error: fetchError } = await query.limit(10000)
     
     if (fetchError) {
       console.error('Error fetching sentences:', fetchError)
@@ -149,14 +152,15 @@ export async function POST(request) {
       }
     })
     
-    // Update sentences in batches of 100
-    const batchSize = 100
+    // Update sentences in batches
+    const batchSize = 50
     let totalUpdated = 0
+    let successfulUpdates = []
     
     for (let i = 0; i < updates.length; i += batchSize) {
       const batch = updates.slice(i, i + batchSize)
       
-      // Update each sentence individually (Supabase doesn't support bulk updates with different values)
+      // Update each sentence individually
       const updatePromises = batch.map(update => 
         supabase
           .from('parallel_corpus')
@@ -168,35 +172,42 @@ export async function POST(request) {
             german_punctuation_count: update.german_punctuation_count,
             punctuation_ratio: update.punctuation_ratio,
             quality_tags: update.quality_tags,
-            quality_bucket: update.quality_bucket
+            quality_bucket: update.quality_bucket,
+            updated_at: new Date().toISOString()
           })
           .eq('id', update.id)
+          .select()
       )
       
       const results = await Promise.all(updatePromises)
       
-      // Check for errors
-      const errors = results.filter(result => result.error)
-      if (errors.length > 0) {
-        console.error('Errors updating sentences:', errors)
-      }
+      // Track successful updates
+      results.forEach((result, index) => {
+        if (!result.error && result.data && result.data.length > 0) {
+          successfulUpdates.push(batch[index])
+          totalUpdated++
+        } else if (result.error) {
+          console.error('Error updating sentence:', batch[index].id, result.error)
+        }
+      })
       
-      totalUpdated += batch.length - errors.length
       console.log(`Updated ${totalUpdated} of ${updates.length} sentences...`)
     }
     
-    // Get summary statistics
-    const bucketCounts = updates.reduce((acc, update) => {
+    // Get summary statistics from successful updates
+    const bucketCounts = successfulUpdates.reduce((acc, update) => {
       acc[update.quality_bucket] = (acc[update.quality_bucket] || 0) + 1
       return acc
     }, {})
+    
+    console.log('Final bucket distribution:', bucketCounts)
     
     return Response.json({ 
       message: 'Quality metrics calculated successfully',
       processed: updates.length,
       updated: totalUpdated,
       bucketCounts,
-      sample: updates.slice(0, 5) // Return first 5 as sample
+      sample: successfulUpdates.slice(0, 5)
     }, { status: 200 })
     
   } catch (error) {
@@ -207,10 +218,9 @@ export async function POST(request) {
   }
 }
 
-// GET endpoint to check calculation status or trigger calculation for all
 export async function GET(request) {
   try {
-    // Get count of sentences without quality metrics
+    // Get count of sentences without quality metrics or in unreviewed
     const { data, error, count } = await supabase
       .from('parallel_corpus')
       .select('id', { count: 'exact', head: true })
@@ -226,18 +236,28 @@ export async function GET(request) {
       .from('parallel_corpus')
       .select('id', { count: 'exact', head: true })
     
-    // Get bucket counts
-    const { data: bucketData, error: bucketError } = await supabase
+    // Get current bucket distribution
+    const { data: allSentences, error: bucketError } = await supabase
       .from('parallel_corpus')
       .select('quality_bucket')
-      .not('quality_bucket', 'is', null)
     
-    let bucketCounts = {}
-    if (bucketData) {
-      bucketCounts = bucketData.reduce((acc, row) => {
-        acc[row.quality_bucket] = (acc[row.quality_bucket] || 0) + 1
-        return acc
-      }, {})
+    let bucketCounts = {
+      high_quality: 0,
+      good_quality: 0,
+      needs_review: 0,
+      poor_quality: 0,
+      unreviewed: 0,
+      approved: 0,
+      rejected: 0
+    }
+    
+    if (allSentences) {
+      allSentences.forEach(row => {
+        const bucket = row.quality_bucket || 'unreviewed'
+        if (bucket in bucketCounts) {
+          bucketCounts[bucket]++
+        }
+      })
     }
     
     return Response.json({
