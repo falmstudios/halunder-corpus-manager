@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import Navbar from '../components/Navbar'
 import DictionarySearch from './DictionarySearch'
 import DictionaryEntry from './DictionaryEntry'
 import AlphabetSidebar from './AlphabetSidebar'
@@ -110,95 +111,81 @@ export default function DictionaryPage() {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh' }}>
-      {/* Alphabet Sidebar */}
-      <AlphabetSidebar 
-        onLetterSelect={handleLetterSelect}
-        selectedLetter={selectedLetter}
-      />
+    <>
+      <Navbar />
+      <div style={{ display: 'flex', height: 'calc(100vh - 60px)' }}>
+        {/* Alphabet Sidebar */}
+        <AlphabetSidebar 
+          onLetterSelect={handleLetterSelect}
+          selectedLetter={selectedLetter}
+        />
 
-      {/* Main Content Area */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        {/* Header */}
-        <div style={{ 
-          padding: '20px', 
-          borderBottom: '1px solid #ddd',
-          backgroundColor: '#f8f9fa'
-        }}>
-          <h1 style={{ margin: '0 0 20px 0' }}>Halunder Wörterbuch</h1>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-  <h1>Wörterbuch</h1>
-  <a 
-    href="/" 
-    style={{
-      padding: '10px 20px',
-      backgroundColor: '#6c757d',
-      color: 'white',
-      textDecoration: 'none',
-      borderRadius: '4px'
-    }}
-  >
-    ← Home
-  </a>
-</div>
-          <DictionarySearch 
-            onSearch={handleSearch}
-            searchTerm={searchTerm}
-            searchType={searchType}
-          />
-          
-          <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
-            <button
-              onClick={() => setShowAddForm(true)}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: '#28a745',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer'
-              }}
-            >
-              + Neuer Eintrag
-            </button>
-            
-            <Link 
-              href="/dictionary/import"
-              style={{
-                padding: '8px 16px',
-                backgroundColor: '#6c757d',
-                color: 'white',
-                textDecoration: 'none',
-                borderRadius: '4px',
-                display: 'inline-block'
-              }}
-            >
-              Wörterbuch importieren
-            </Link>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          {/* Entry List */}
+        {/* Main Content Area */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          {/* Header */}
           <div style={{ 
-            width: '400px', 
-            borderRight: '1px solid #ddd',
-            overflow: 'auto',
-            backgroundColor: '#fff'
+            padding: '20px', 
+            borderBottom: '1px solid #ddd',
+            backgroundColor: '#f8f9fa'
           }}>
-            {loading ? (
-              <div style={{ padding: '20px', textAlign: 'center' }}>
-                Lädt...
-              </div>
-            ) : entries.length === 0 ? (
-              <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
-                Keine Einträge gefunden
-              </div>
-            ) : (
-              <div>
-                {entries.map((entry) => (
+            <h1 style={{ margin: '0 0 20px 0' }}>Halunder Wörterbuch</h1>
+            
+            <DictionarySearch 
+              onSearch={handleSearch}
+              searchTerm={searchTerm}
+              searchType={searchType}
+            />
+            
+            <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => setShowAddForm(true)}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                + Neuer Eintrag
+              </button>
+              
+              <Link 
+                href="/dictionary/import"
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#6c757d',
+                  color: 'white',
+                  textDecoration: 'none',
+                  borderRadius: '4px',
+                  display: 'inline-block'
+                }}
+              >
+                Wörterbuch importieren
+              </Link>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+            {/* Entry List */}
+            <div style={{ 
+              width: '400px', 
+              borderRight: '1px solid #ddd',
+              overflow: 'auto',
+              backgroundColor: '#fff'
+            }}>
+              {loading ? (
+                <div style={{ padding: '20px', textAlign: 'center' }}>
+                  Lädt...
+                </div>
+              ) : entries.length === 0 ? (
+                <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+                  {searchTerm || selectedLetter ? 'Keine Einträge gefunden.' : 'Bitte suchen Sie nach einem Wort oder wählen Sie einen Buchstaben.'}
+                </div>
+              ) : (
+                entries.map(entry => (
                   <div
                     key={entry.id}
                     onClick={() => handleSelectEntry(entry)}
@@ -220,89 +207,60 @@ export default function DictionaryPage() {
                       }
                     }}
                   >
-                    <div style={{ marginBottom: '4px' }}>
-                      <span style={{ fontWeight: 'bold', fontSize: '16px' }}>
-                        {entry.halunder_word}
-                      </span>
-                      {entry.german_word && (
-                        <span style={{ 
-                          color: '#666',
-                          fontSize: '14px',
-                          marginLeft: '10px'
-                        }}>
-                          → {entry.german_word}
-                          {entry.gender && entry.word_type === 'noun' && (
-                            <span>, {getArticle(entry.gender)}</span>
-                          )}
-                        </span>
+                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+                      {entry.halunder_word}
+                    </div>
+                    <div style={{ fontSize: '14px', color: '#666' }}>
+                      {entry.word_type && (
+                        <span>{getWordTypeLabel(entry.word_type)}</span>
+                      )}
+                      {entry.word_gender && (
+                        <span> ({getArticle(entry.word_gender)})</span>
                       )}
                     </div>
-                    
-                    {entry.word_type && (
-                      <div style={{ fontSize: '12px', color: '#666' }}>
-                        {getWordTypeLabel(entry.word_type)}
-                      </div>
-                    )}
-                    
-                    {entry.dictionary_meanings?.[0] && (
-                      <div style={{ 
-                        fontSize: '14px', 
-                        color: '#333',
-                        marginTop: '5px',
-                        fontStyle: 'italic',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        {entry.dictionary_meanings[0].german_meaning}
-                      </div>
-                    )}
-                    
-                    <div style={{ 
-                      fontSize: '11px', 
-                      color: '#999',
-                      marginTop: '5px'
-                    }}>
-                      Quelle: {entry.source}
+                    <div style={{ fontSize: '14px', color: '#444', marginTop: '2px' }}>
+                      {entry.german_word}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                ))
+              )}
+            </div>
 
-          {/* Entry Detail */}
-          <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
-            {selectedEntry ? (
-              <DictionaryEntry 
-                key={selectedEntry.id}
-                entry={selectedEntry}
-                onUpdate={handleEntryUpdate}
-              />
-            ) : (
-              <div style={{ 
-                textAlign: 'center', 
-                color: '#666',
-                paddingTop: '100px'
-              }}>
-                Wähle einen Eintrag aus der Liste aus
-              </div>
-            )}
+            {/* Entry Details */}
+            <div style={{ flex: 1, overflow: 'auto', backgroundColor: '#fff' }}>
+              {selectedEntry ? (
+                <DictionaryEntry 
+                  entry={selectedEntry} 
+                  onUpdate={handleEntryUpdate}
+                />
+              ) : (
+                <div style={{ 
+                  padding: '40px', 
+                  textAlign: 'center', 
+                  color: '#666',
+                  height: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  Wählen Sie einen Eintrag aus der Liste aus
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Add Entry Modal */}
-      {showAddForm && (
-        <AddEntryModal
-          onClose={() => setShowAddForm(false)}
-          onSave={(newEntry) => {
-            setShowAddForm(false)
-            loadEntries()
-            setSelectedEntry(newEntry)
-          }}
-        />
-      )}
-    </div>
+        {/* Add Entry Modal */}
+        {showAddForm && (
+          <AddEntryModal
+            onClose={() => setShowAddForm(false)}
+            onSave={() => {
+              setShowAddForm(false)
+              loadEntries()
+            }}
+          />
+        )}
+      </div>
+    </>
   )
 }
