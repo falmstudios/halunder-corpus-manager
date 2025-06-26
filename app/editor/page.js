@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Navbar from '../components/Navbar'
 
 const TABLES = {
   documents: 'Documents',
@@ -66,20 +67,25 @@ export default function TableEditor() {
   useEffect(() => {
     // Initialize visible columns for selected table
     const columns = TABLE_COLUMNS[selectedTable]
-    const initialVisible = {}
-    columns.forEach(col => {
-      // Show first 6 columns by default
-      initialVisible[col] = columns.indexOf(col) < 6
-    })
-    setVisibleColumns(initialVisible)
+    const defaultVisible = columns.reduce((acc, col) => {
+      // Show first 5 columns by default
+      acc[col] = columns.indexOf(col) < 5
+      return acc
+    }, {})
+    setVisibleColumns(defaultVisible)
+    
+    // Reset page when changing tables
     setPage(1)
-    setFilters({}) // Clear filters when changing tables
+    setFilters({})
+    setSortColumn('')
+    setSortDirection('asc')
+    
     loadData()
   }, [selectedTable])
 
   useEffect(() => {
     loadData()
-  }, [page, sortColumn, sortDirection, filters, pageSize])
+  }, [page, sortColumn, sortDirection, filters])
 
   const loadData = async () => {
     setLoading(true)
@@ -89,11 +95,21 @@ export default function TableEditor() {
       const params = new URLSearchParams({
         table: selectedTable,
         page: page.toString(),
-        pageSize: pageSize.toString(),
-        ...(sortColumn && { sortColumn, sortDirection }),
-        ...filters
+        pageSize: pageSize.toString()
       })
-
+      
+      if (sortColumn) {
+        params.append('sortColumn', sortColumn)
+        params.append('sortDirection', sortDirection)
+      }
+      
+      // Add filters
+      Object.entries(filters).forEach(([column, value]) => {
+        if (value) {
+          params.append(column, value)
+        }
+      })
+      
       const response = await fetch(`/api/table-data?${params}`)
       const result = await response.json()
       
@@ -101,20 +117,14 @@ export default function TableEditor() {
         throw new Error(result.error || 'Failed to load data')
       }
       
-      setData(result.data)
-      setTotalCount(result.totalCount)
+      setData(result.data || [])
+      setTotalCount(result.totalCount || 0)
     } catch (err) {
       setError(err.message)
+      setData([])
     } finally {
       setLoading(false)
     }
-  }
-
-  const toggleColumn = (column) => {
-    setVisibleColumns(prev => ({
-      ...prev,
-      [column]: !prev[column]
-    }))
   }
 
   const handleSort = (column) => {
@@ -127,378 +137,340 @@ export default function TableEditor() {
   }
 
   const handleFilter = (column, value) => {
-    setFilters(prev => {
-      const newFilters = { ...prev }
-      if (value.trim() === '') {
-        delete newFilters[column]
-      } else {
-        newFilters[column] = value
-      }
-      return newFilters
-    })
-    setPage(1)
+    setFilters({ ...filters, [column]: value })
+    setPage(1) // Reset to first page when filtering
   }
 
-  const clearAllFilters = () => {
-    setFilters({})
-    setPage(1)
-  }
-
-  const handleCellEdit = async (rowId, column, newValue) => {
+  const handleCellEdit = async (id, column, value) => {
     try {
       const response = await fetch('/api/table-update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           table: selectedTable,
-          id: rowId,
+          id,
           column,
-          value: newValue
+          value
         })
       })
-
+      
       if (!response.ok) {
-        const result = await response.json()
-        throw new Error(result.error || 'Failed to update')
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to update')
       }
-
-      loadData() // Reload data
+      
+      // Refresh data
+      loadData()
       setEditingCell(null)
     } catch (err) {
-      setError(err.message)
+      alert('Failed to update: ' + err.message)
     }
   }
 
-  const handleDeleteRow = async (rowId) => {
-    if (!confirm('Are you sure you want to delete this row?')) return
-
+  const handleDelete = async (id) => {
+    if (!confirm('Are you sure you want to delete this record?')) {
+      return
+    }
+    
     try {
       const response = await fetch('/api/table-delete', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           table: selectedTable,
-          id: rowId
+          id
         })
       })
-
+      
       if (!response.ok) {
-        const result = await response.json()
-        throw new Error(result.error || 'Failed to delete')
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to delete')
       }
-
+      
+      // Refresh data
       loadData()
     } catch (err) {
-      setError(err.message)
+      alert('Failed to delete: ' + err.message)
     }
   }
 
-  const visibleCols = TABLE_COLUMNS[selectedTable].filter(col => visibleColumns[col])
+  const visibleColumnsList = Object.entries(visibleColumns)
+    .filter(([_, visible]) => visible)
+    .map(([col]) => col)
+
   const totalPages = Math.ceil(totalCount / pageSize)
 
   return (
-    <div style={{ padding: '20px', maxWidth: '100vw', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h1>Table Editor</h1>
-        <a 
-          href="/" 
-          style={{
-            padding: '10px 20px',
-            backgroundColor: '#6c757d',
-            color: 'white',
-            textDecoration: 'none',
-            borderRadius: '4px'
-          }}
-        >
-          Back to Upload
-        </a>
-      </div>
-
-      {/* Controls Row */}
-      <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
-        {/* Table Selection */}
-        <div>
-          <label style={{ fontWeight: 'bold', marginRight: '10px' }}>Table:</label>
-          <select 
-            value={selectedTable} 
-            onChange={(e) => setSelectedTable(e.target.value)}
-            style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-          >
-            {Object.entries(TABLES).map(([key, label]) => (
-              <option key={key} value={key}>{label}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Page Size */}
-        <div>
-          <label style={{ fontWeight: 'bold', marginRight: '10px' }}>Rows per page:</label>
-          <select 
-            value={pageSize} 
-            onChange={(e) => setPageSize(parseInt(e.target.value))}
-            style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-          >
-            <option value={25}>25</option>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-            <option value={200}>200</option>
-          </select>
-        </div>
-
-        {/* Clear Filters */}
-        <button
-          onClick={clearAllFilters}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#ffc107',
-            color: '#212529',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
-        >
-          Clear All Filters
-        </button>
-      </div>
-
-      {/* Column Visibility Controls */}
-      <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
-        <h3>Show/Hide Columns:</h3>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-          {TABLE_COLUMNS[selectedTable].map(column => (
-            <label key={column} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <input
-                type="checkbox"
-                checked={visibleColumns[column] || false}
-                onChange={() => toggleColumn(column)}
-              />
-              <span style={{ fontSize: '14px' }}>{column}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#e3f2fd', borderRadius: '4px' }}>
-        <h3>Filters: <small style={{ fontWeight: 'normal', color: '#666' }}>
-          (Use "NULL" for empty fields, "NOT_NULL" for non-empty fields, "EMPTY" for empty strings)
-        </small></h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
-          {visibleCols.map(column => (
-            <div key={column}>
-              <label style={{ display: 'block', fontSize: '12px', marginBottom: '2px' }}>{column}:</label>
-              <input
-                type="text"
-                placeholder={`Filter ${column}...`}
-                value={filters[column] || ''}
-                onChange={(e) => handleFilter(column, e.target.value)}
-                style={{ 
-                  width: '100%', 
-                  padding: '6px', 
-                  borderRadius: '3px', 
-                  border: '1px solid #ccc',
-                  fontSize: '12px'
-                }}
-              />
+    <>
+      <Navbar />
+      <div className="container">
+        <div className="page-content">
+          <h1>Table Editor</h1>
+          
+          {/* Table selector */}
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ marginRight: '10px' }}>Select table:</label>
+            <select
+              value={selectedTable}
+              onChange={(e) => setSelectedTable(e.target.value)}
+              style={{
+                padding: '8px',
+                fontSize: '16px',
+                border: '1px solid #ddd',
+                borderRadius: '4px'
+              }}
+            >
+              {Object.entries(TABLES).map(([key, label]) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </select>
+            
+            <span style={{ marginLeft: '20px', color: '#666' }}>
+              Total records: {totalCount}
+            </span>
+          </div>
+          
+          {/* Column visibility toggle */}
+          <details style={{ marginBottom: '20px' }}>
+            <summary style={{ cursor: 'pointer', padding: '10px', backgroundColor: '#f8f9fa' }}>
+              Column Visibility
+            </summary>
+            <div style={{ padding: '10px', backgroundColor: '#f8f9fa', display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+              {TABLE_COLUMNS[selectedTable].map(col => (
+                <label key={col} style={{ display: 'flex', alignItems: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns[col] || false}
+                    onChange={(e) => setVisibleColumns({
+                      ...visibleColumns,
+                      [col]: e.target.checked
+                    })}
+                    style={{ marginRight: '5px' }}
+                  />
+                  {col}
+                </label>
+              ))}
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Data Count */}
-      <div style={{ marginBottom: '10px', fontSize: '14px', color: '#666' }}>
-        Total records: {totalCount} | Page {page} of {totalPages}
-        {Object.keys(filters).length > 0 && (
-          <span style={{ marginLeft: '10px', color: '#007bff' }}>
-            (Filtered by: {Object.keys(filters).join(', ')})
-          </span>
-        )}
-      </div>
-
-      {error && (
-        <div style={{
-          padding: '10px',
-          marginBottom: '20px',
-          backgroundColor: '#ffebee',
-          color: '#c62828',
-          borderRadius: '4px'
-        }}>
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '40px' }}>Loading...</div>
-      ) : (
-        <>
+          </details>
+          
+          {/* Error display */}
+          {error && (
+            <div style={{
+              padding: '10px',
+              backgroundColor: '#fee',
+              color: '#c00',
+              borderRadius: '4px',
+              marginBottom: '20px'
+            }}>
+              Error: {error}
+            </div>
+          )}
+          
           {/* Table */}
-          <div style={{ overflowX: 'auto', border: '1px solid #ddd', borderRadius: '4px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#f8f9fa' }}>
-                  <th style={{ padding: '8px', border: '1px solid #ddd', minWidth: '60px' }}>Actions</th>
-                  {visibleCols.map(column => (
-                    <th 
-                      key={column} 
-                      style={{ 
-                        padding: '8px', 
-                        border: '1px solid #ddd', 
-                        cursor: 'pointer',
-                        minWidth: '120px',
-                        backgroundColor: sortColumn === column ? '#e3f2fd' : '#f8f9fa'
-                      }}
-                      onClick={() => handleSort(column)}
-                    >
-                      {column} 
-                      {sortColumn === column && (
-                        <span style={{ marginLeft: '5px' }}>
-                          {sortDirection === 'asc' ? '↑' : '↓'}
-                        </span>
-                      )}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.map((row, rowIndex) => (
-                  <tr key={row.id} style={{ backgroundColor: rowIndex % 2 === 0 ? '#fff' : '#f9f9f9' }}>
-                    <td style={{ padding: '4px', border: '1px solid #ddd', textAlign: 'center' }}>
-                      <button
-                        onClick={() => handleDeleteRow(row.id)}
-                        style={{
-                          padding: '2px 6px',
-                          backgroundColor: '#dc3545',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '3px',
-                          fontSize: '10px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                    {visibleCols.map(column => (
-                      <td 
-                        key={column} 
-                        style={{ 
-                          padding: '4px', 
-                          border: '1px solid #ddd',
-                          maxWidth: '200px',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
-                        }}
-                        onDoubleClick={() => setEditingCell(`${row.id}-${column}`)}
-                      >
-                        {editingCell === `${row.id}-${column}` ? (
+          {loading ? (
+            <p>Loading...</p>
+          ) : (
+            <>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{
+                  width: '100%',
+                  borderCollapse: 'collapse',
+                  fontSize: '14px'
+                }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f8f9fa' }}>
+                      {visibleColumnsList.map(col => (
+                        <th
+                          key={col}
+                          style={{
+                            padding: '10px',
+                            borderBottom: '2px solid #dee2e6',
+                            textAlign: 'left',
+                            whiteSpace: 'nowrap',
+                            cursor: 'pointer',
+                            userSelect: 'none'
+                          }}
+                          onClick={() => handleSort(col)}
+                        >
+                          {col}
+                          {sortColumn === col && (
+                            <span> {sortDirection === 'asc' ? '↑' : '↓'}</span>
+                          )}
+                        </th>
+                      ))}
+                      <th style={{
+                        padding: '10px',
+                        borderBottom: '2px solid #dee2e6',
+                        textAlign: 'center'
+                      }}>
+                        Actions
+                      </th>
+                    </tr>
+                    <tr>
+                      {visibleColumnsList.map(col => (
+                        <th key={col} style={{ padding: '5px' }}>
                           <input
                             type="text"
-                            defaultValue={row[column] || ''}
-                            autoFocus
-                            onBlur={(e) => handleCellEdit(row.id, column, e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                handleCellEdit(row.id, column, e.target.value)
-                              } else if (e.key === 'Escape') {
-                                setEditingCell(null)
-                              }
-                            }}
-                            style={{ 
-                              width: '100%', 
-                              padding: '2px',
-                              border: '1px solid #007bff',
-                              borderRadius: '2px',
-                              fontSize: '12px'
+                            placeholder="Filter..."
+                            value={filters[col] || ''}
+                            onChange={(e) => handleFilter(col, e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '4px',
+                              fontSize: '12px',
+                              border: '1px solid #ddd',
+                              borderRadius: '2px'
                             }}
                           />
-                        ) : (
-                          <span title={row[column]} style={{ cursor: 'pointer' }}>
-                            {typeof row[column] === 'object' 
-                              ? JSON.stringify(row[column]) 
-                              : String(row[column] || '')}
-                          </span>
-                        )}
-                      </td>
+                        </th>
+                      ))}
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.map((row, index) => (
+                      <tr
+                        key={row.id}
+                        style={{
+                          backgroundColor: index % 2 === 0 ? 'white' : '#f8f9fa'
+                        }}
+                      >
+                        {visibleColumnsList.map(col => (
+                          <td
+                            key={col}
+                            style={{
+                              padding: '8px',
+                              borderBottom: '1px solid #dee2e6',
+                              maxWidth: '300px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}
+                            title={row[col]}
+                            onDoubleClick={() => setEditingCell(`${row.id}-${col}`)}
+                          >
+                            {editingCell === `${row.id}-${col}` ? (
+                              <input
+                                type="text"
+                                defaultValue={row[col] || ''}
+                                onBlur={(e) => handleCellEdit(row.id, col, e.target.value)}
+                                onKeyPress={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleCellEdit(row.id, col, e.target.value)
+                                  }
+                                }}
+                                style={{
+                                  width: '100%',
+                                  padding: '4px',
+                                  border: '1px solid #007bff'
+                                }}
+                                autoFocus
+                              />
+                            ) : (
+                              row[col] || <span style={{ color: '#ccc' }}>NULL</span>
+                            )}
+                          </td>
+                        ))}
+                        <td style={{
+                          padding: '8px',
+                          borderBottom: '1px solid #dee2e6',
+                          textAlign: 'center'
+                        }}>
+                          <button
+                            onClick={() => handleDelete(row.id)}
+                            style={{
+                              padding: '4px 8px',
+                              backgroundColor: '#dc3545',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '2px',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
                     ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center', 
-            gap: '10px', 
-            marginTop: '20px' 
-          }}>
-            <button
-              onClick={() => setPage(1)}
-              disabled={page === 1}
-              style={{
-                padding: '8px 12px',
-                backgroundColor: page === 1 ? '#ccc' : '#6c757d',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: page === 1 ? 'not-allowed' : 'pointer'
-              }}
-            >
-              First
-            </button>
-            
-            <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page === 1}
-              style={{
-                padding: '8px 12px',
-                backgroundColor: page === 1 ? '#ccc' : '#007bff',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: page === 1 ? 'not-allowed' : 'pointer'
-              }}
-            >
-              Previous
-            </button>
-            
-            <span>Page {page} of {totalPages}</span>
-            
-            <button
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              style={{
-                padding: '8px 12px',
-                backgroundColor: page === totalPages ? '#ccc' : '#007bff',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: page === totalPages ? 'not-allowed' : 'pointer'
-              }}
-            >
-              Next
-            </button>
-            
-            <button
-              onClick={() => setPage(totalPages)}
-              disabled={page === totalPages}
-              style={{
-                padding: '8px 12px',
-                backgroundColor: page === totalPages ? '#ccc' : '#6c757d',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: page === totalPages ? 'not-allowed' : 'pointer'
-              }}
-            >
-              Last
-            </button>
-          </div>
-        </>
-      )}
-    </div>
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* Pagination */}
+              <div style={{
+                marginTop: '20px',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                <button
+                  onClick={() => setPage(1)}
+                  disabled={page === 1}
+                  style={{
+                    padding: '8px 12px',
+                    backgroundColor: page === 1 ? '#ccc' : '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: page === 1 ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  First
+                </button>
+                
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  style={{
+                    padding: '8px 12px',
+                    backgroundColor: page === 1 ? '#ccc' : '#007bff',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: page === 1 ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  Previous
+                </button>
+                
+                <span>Page {page} of {totalPages}</span>
+                
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  style={{
+                    padding: '8px 12px',
+                    backgroundColor: page === totalPages ? '#ccc' : '#007bff',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: page === totalPages ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  Next
+                </button>
+                
+                <button
+                  onClick={() => setPage(totalPages)}
+                  disabled={page === totalPages}
+                  style={{
+                    padding: '8px 12px',
+                    backgroundColor: page === totalPages ? '#ccc' : '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: page === totalPages ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  Last
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </>
   )
 }
