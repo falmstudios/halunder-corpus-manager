@@ -30,7 +30,7 @@ export async function POST(request) {
     const unknownWords = []
     
     for (const word of words) {
-      // Try exact match first
+      // Search in dictionary_entries from ALL sources
       let { data: entries, error } = await supabase
         .from('dictionary_entries')
         .select(`
@@ -43,73 +43,20 @@ export async function POST(request) {
           usage_notes,
           plural,
           additional_info,
+          source,
+          german_word,
           dictionary_meanings (
             id,
             german_meaning,
             meaning_number
+          ),
+          dictionary_examples (
+            halunder_sentence,
+            german_sentence
           )
         `)
-        .eq('halunder_word', word)
-      
-      // If no exact match, try case-insensitive
-      if (!entries || entries.length === 0) {
-        const result = await supabase
-          .from('dictionary_entries')
-          .select(`
-            id,
-            halunder_word,
-            pronunciation,
-            word_type,
-            gender,
-            etymology,
-            usage_notes,
-            plural,
-            additional_info,
-            dictionary_meanings (
-              id,
-              german_meaning,
-              meaning_number
-            )
-          `)
-          .ilike('halunder_word', word)
-        
-        entries = result.data
-        error = result.error
-      }
-      
-      // If still no match, check word forms table
-      if (!entries || entries.length === 0) {
-        const { data: wordForms } = await supabase
-          .from('dictionary_word_forms')
-          .select(`
-            entry_id,
-            word_form,
-            form_type,
-            dictionary_entries (
-              id,
-              halunder_word,
-              pronunciation,
-              word_type,
-              gender,
-              etymology,
-              usage_notes,
-              dictionary_meanings (
-                id,
-                german_meaning,
-                meaning_number
-              )
-            )
-          `)
-          .ilike('word_form', word)
-        
-        if (wordForms && wordForms.length > 0) {
-          entries = wordForms.map(wf => ({
-            ...wf.dictionary_entries,
-            matched_form: wf.word_form,
-            form_type: wf.form_type
-          }))
-        }
-      }
+        .or(`halunder_word.eq.${word},halunder_word.ilike.${word}`)
+        .limit(10)
       
       if (!error && entries && entries.length > 0) {
         wordAnalysis[word] = entries.map(entry => ({
@@ -118,21 +65,43 @@ export async function POST(request) {
           halunder_word: entry.halunder_word,
           word_type: entry.word_type,
           gender: entry.gender,
-          german_meaning: entry.dictionary_meanings
-            ?.map(m => m.german_meaning)
-            ?.filter(m => m)
-            ?.join('; ') || '',
+          german_meaning: entry.german_word || 
+            entry.dictionary_meanings
+              ?.map(m => m.german_meaning)
+              ?.filter(m => m)
+              ?.join('; ') || '',
           pronunciation: entry.pronunciation,
           etymology: entry.etymology,
           usage_notes: entry.usage_notes,
-          matched_form: entry.matched_form,
-          form_type: entry.form_type
+          source: entry.source,
+          examples: entry.dictionary_examples || []
         }))
         
-        console.log(`Found ${entries.length} entries for word:`, word)
+        console.log(`Found ${entries.length} entries for word "${word}" from sources:`, 
+          entries.map(e => e.source).filter((v, i, a) => a.indexOf(v) === i))
       } else {
-        unknownWords.push(word)
-        console.log('No entries found for word:', word)
+        // Also check the German side
+        const { data: germanEntries } = await supabase
+          .from('dictionary_entries')
+          .select(`
+            id,
+            halunder_word,
+            german_word,
+            pronunciation,
+            word_type,
+            gender,
+            source
+          `)
+          .ilike('german_word', `%${word}%`)
+          .limit(5)
+        
+        if (germanEntries && germanEntries.length > 0) {
+          // Word found as German translation
+          console.log(`Word "${word}" found as German translation in ${germanEntries.length} entries`)
+        } else {
+          unknownWords.push(word)
+          console.log('No entries found for word:', word)
+        }
       }
     }
     
