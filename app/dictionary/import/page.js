@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import Navbar from '@/app/Navbar'
+import Navbar from '../../components/Navbar'
 
 export default function DictionaryImportPage() {
   const [importing, setImporting] = useState(false)
@@ -45,80 +45,136 @@ export default function DictionaryImportPage() {
   return (
     <>
       <Navbar />
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8">Krogmann Dictionary Import</h1>
-        
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Upload Dictionary JSON File</h2>
+      <div className="container">
+        <div className="page-content">
+          <h1>Krogmann Dictionary Import</h1>
           
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select a Krogmann dictionary JSON file
-            </label>
-            <input
-              type="file"
-              accept=".json"
-              onChange={handleFileUpload}
-              disabled={importing}
-              className="block w-full text-sm text-gray-500
-                file:mr-4 file:py-2 file:px-4
-                file:rounded-md file:border-0
-                file:text-sm file:font-semibold
-                file:bg-blue-50 file:text-blue-700
-                hover:file:bg-blue-100
-                disabled:opacity-50"
-            />
+          <div style={{ marginBottom: '30px' }}>
+            <h2>Upload Dictionary JSON File</h2>
+            
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: '#374151',
+                marginBottom: '8px'
+              }}>
+                Select a Krogmann dictionary JSON file
+              </label>
+              <input
+                type="file"
+                accept=".json"
+                onChange={handleFileUpload}
+                disabled={importing}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '8px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  cursor: importing ? 'not-allowed' : 'pointer'
+                }}
+              />
+            </div>
+
+            {importing && (
+              <div style={{ color: '#3498db' }}>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <div style={{
+                    display: 'inline-block',
+                    width: '20px',
+                    height: '20px',
+                    marginRight: '10px',
+                    border: '3px solid #f3f3f3',
+                    borderTop: '3px solid #3498db',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite'
+                  }} />
+                  Importing dictionary entries...
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <div style={{
+                marginTop: '20px',
+                padding: '16px',
+                backgroundColor: '#fee2e2',
+                border: '1px solid #fecaca',
+                borderRadius: '6px'
+              }}>
+                <p style={{ color: '#dc2626', margin: 0 }}>Error: {error}</p>
+              </div>
+            )}
+
+            {results && (
+              <div style={{
+                marginTop: '20px',
+                padding: '16px',
+                backgroundColor: '#d1fae5',
+                border: '1px solid '#a7f3d0',
+                borderRadius: '6px'
+              }}>
+                <p style={{ color: '#059669', fontWeight: 'bold', margin: 0 }}>
+                  {results.message}
+                </p>
+                <p style={{ color: '#047857', marginTop: '8px', marginBottom: 0 }}>
+                  Successfully imported: {results.processed} entries
+                </p>
+                {results.errors && results.errors.length > 0 && (
+                  <div style={{ marginTop: '12px' }}>
+                    <p style={{ color: '#ea580c', fontWeight: 'bold' }}>
+                      Errors: {results.errors.length}
+                    </p>
+                    <ul style={{
+                      fontSize: '14px',
+                      color: '#c2410c',
+                      marginTop: '8px',
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                      backgroundColor: 'white',
+                      padding: '10px',
+                      borderRadius: '4px'
+                    }}>
+                      {results.errors.map((err, idx) => (
+                        <li key={idx}>{err.word}: {err.error}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          {importing && (
-            <div className="text-blue-600">
-              <div className="flex items-center">
-                <svg className="animate-spin h-5 w-5 mr-3" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                Importing dictionary entries...
-              </div>
-            </div>
-          )}
-
-          {error && (
-            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-md">
-              <p className="text-red-800">Error: {error}</p>
-            </div>
-          )}
-
-          {results && (
-            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-md">
-              <p className="text-green-800 font-semibold">{results.message}</p>
-              <p className="text-green-700 mt-1">
-                Successfully imported: {results.processed} entries
-              </p>
-              {results.errors && results.errors.length > 0 && (
-                <div className="mt-2">
-                  <p className="text-orange-700">Errors: {results.errors.length}</p>
-                  <ul className="text-sm text-orange-600 mt-1 max-h-40 overflow-y-auto">
-                    {results.errors.map((err, idx) => (
-                      <li key={idx}>{err.word}: {err.error}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="bg-gray-50 rounded-lg p-6">
-          <h3 className="font-semibold mb-2">Instructions:</h3>
-          <ol className="list-decimal list-inside space-y-1 text-sm text-gray-700">
-            <li>Select a JSON file containing Krogmann dictionary entries</li>
-            <li>The file should contain an array of dictionary entry objects</li>
-            <li>Each entry will be imported with all its meanings, examples, and related information</li>
-            <li>Duplicate entries will be skipped</li>
-            <li>After import, you can view and search entries in the main dictionary</li>
-          </ol>
+          <div style={{
+            backgroundColor: '#f9fafb',
+            borderRadius: '8px',
+            padding: '20px',
+            marginTop: '30px'
+          }}>
+            <h3 style={{ marginTop: 0 }}>Instructions:</h3>
+            <ol style={{
+              lineHeight: '1.8',
+              color: '#4b5563'
+            }}>
+              <li>Select a JSON file containing Krogmann dictionary entries</li>
+              <li>The file should contain an array of dictionary entry objects</li>
+              <li>Each entry will be imported with all its meanings, examples, and related information</li>
+              <li>Duplicate entries will be skipped</li>
+              <li>After import, you can view and search entries in the main dictionary</li>
+            </ol>
+          </div>
         </div>
       </div>
+
+      <style jsx>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
     </>
   )
 }
