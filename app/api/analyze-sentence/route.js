@@ -25,7 +25,60 @@ export async function POST(request) {
     const { data: lookupResults, error } = await supabase
       .rpc('lookup_dictionary_words', { words })
     
-    if (error) throw error
+    if (error) {
+      console.error('Dictionary lookup error:', error)
+      // If the RPC function doesn't exist, fall back to direct query
+      const wordAnalysis = {}
+      const unknownWords = []
+      
+      for (const word of words) {
+        const { data: entries, error: queryError } = await supabase
+          .from('dictionary_entries')
+          .select(`
+            id,
+            halunder_word,
+            pronunciation,
+            word_type,
+            gender,
+            etymology,
+            usage_notes,
+            dictionary_meanings (
+              german_meaning
+            )
+          `)
+          .ilike('halunder_word', word)
+          .limit(5)
+        
+        if (!queryError && entries && entries.length > 0) {
+          wordAnalysis[word] = entries.map(entry => ({
+            word,
+            entry_id: entry.id,
+            halunder_word: entry.halunder_word,
+            word_type: entry.word_type,
+            gender: entry.gender,
+            german_meaning: entry.dictionary_meanings?.[0]?.german_meaning || '',
+            pronunciation: entry.pronunciation,
+            etymology: entry.etymology,
+            usage_notes: entry.usage_notes
+          }))
+        } else {
+          unknownWords.push(word)
+        }
+      }
+      
+      return Response.json({
+        sentence,
+        words,
+        wordAnalysis,
+        unknownWords,
+        stats: {
+          totalWords: words.length,
+          knownWords: Object.keys(wordAnalysis).length,
+          unknownWords: unknownWords.length,
+          coverage: (Object.keys(wordAnalysis).length / words.length * 100).toFixed(1) + '%'
+        }
+      })
+    }
     
     // Group results by word
     const wordAnalysis = {}
