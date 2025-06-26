@@ -929,7 +929,37 @@ export default function CorpusViewer() {
                         </>
                       )}
                     </div>
-                    
+{/* Add this export dropdown in the bulk actions bar */}
+{selectedBucket !== 'all' && buckets.find(b => b.key === selectedBucket)?.count > 0 && (
+  <select
+    onChange={(e) => {
+      const format = e.target.value
+      if (format) {
+        const bucket = buckets.find(b => b.key === selectedBucket)
+        if (confirm(`Alle ${bucket.count} Sätze aus "${bucket.label}" exportieren?`)) {
+          window.location.href = `/api/corpus-quality/export?bucket=${selectedBucket}&format=${format}`
+        }
+      }
+      e.target.value = ''
+    }}
+    style={{
+      padding: '8px',
+      borderRadius: '4px',
+      border: '1px solid #ced4da',
+      backgroundColor: '#17a2b8',
+      color: 'white',
+      cursor: 'pointer'
+    }}
+  >
+    <option value="">Export...</option>
+    <option value="json">JSON (vollständig)</option>
+    <option value="jsonl">JSONL (Training)</option>
+    <option value="tsv">TSV (Tab-getrennt)</option>
+    <option value="csv">CSV (Excel)</option>
+    <option value="txt">TXT (einfach)</option>
+  </select>
+)}
+
                     {/* Sentences list */}
                     {qualitySentences.map((sentence) => (
                       <div
