@@ -463,3 +463,147 @@ export default function CorpusViewer() {
                           color: page === 1 ? '#6c757d' : 'white',
                           border: 'none',
                           borderRadius: '4px
+                            cursor: page === 1 ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        Zurück
+                      </button>
+                      <span style={{ padding: '8px 16px' }}>
+                        Seite {page} von {totalPages}
+                      </span>
+                      <button
+                        onClick={() => setPage(Math.min(totalPages, page + 1))}
+                        disabled={page === totalPages}
+                        style={{
+                          padding: '8px 16px',
+                          backgroundColor: page === totalPages ? '#e9ecef' : '#007bff',
+                          color: page === totalPages ? '#6c757d' : 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: page === totalPages ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        Weiter
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          ) : (
+            <div>
+              {activeTab === 'parallel' && (
+                <div>
+                  {filteredSentences.length === 0 ? (
+                    <p>No parallel sentences found.</p>
+                  ) : (
+                    filteredSentences.map((sentence, index) => (
+                      <div
+                        key={sentence.id}
+                        style={{
+                          marginBottom: '15px',
+                          padding: '15px',
+                          backgroundColor: index % 2 === 0 ? '#f9fafb' : 'white',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '8px'
+                        }}
+                      >
+                        <div style={{ marginBottom: '8px' }}>
+                          <strong>Halunder:</strong> {sentence.halunder_sentence}
+                        </div>
+                        <div style={{ marginBottom: '8px' }}>
+                          <strong>Deutsch:</strong> {sentence.german_sentence}
+                        </div>
+                        {!selectedTextId && (
+                          <div style={{ fontSize: '14px', color: '#6b7280' }}>
+                            <strong>Text:</strong> {sentence.source_text_title || 'Unknown'}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'features' && (
+                <div>
+                  {filteredFeatures.length === 0 ? (
+                    <p>No linguistic features found.</p>
+                  ) : (
+                    filteredFeatures.map((feature, index) => (
+                      <div
+                        key={feature.id}
+                        style={{
+                          marginBottom: '15px',
+                          padding: '15px',
+                          backgroundColor: index % 2 === 0 ? '#f9fafb' : 'white',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '8px'
+                        }}
+                      >
+                        <div style={{ marginBottom: '8px' }}>
+                          <strong>Halunder Term:</strong> {feature.halunder_term}
+                        </div>
+                        {feature.german_equivalent && (
+                          <div style={{ marginBottom: '8px' }}>
+                            <strong>German:</strong> {feature.german_equivalent}
+                          </div>
+                        )}
+                        <div style={{ marginBottom: '8px' }}>
+                          <strong>Explanation:</strong> {feature.explanation}
+                        </div>
+                        {feature.feature_type && (
+                          <div style={{ fontSize: '14px', color: '#6b7280' }}>
+                            <strong>Type:</strong> {feature.feature_type}
+                          </div>
+                        )}
+                        {!selectedTextId && (
+                          <div style={{ fontSize: '14px', color: '#6b7280', marginTop: '4px' }}>
+                            <strong>Text:</strong> {feature.source_text_title || 'Unknown'}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'vocabulary' && (
+                <div>
+                  {filteredVocabulary.length === 0 ? (
+                    <p>No vocabulary entries found.</p>
+                  ) : (
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                      gap: '10px'
+                    }}>
+                      {filteredVocabulary.map((word) => (
+                        <div
+                          key={word.id}
+                          style={{
+                            padding: '10px',
+                            backgroundColor: '#f9fafb',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                        >
+                          <div style={{ fontWeight: 'bold' }}>
+                            {word.halunder_word}
+                          </div>
+                          <div style={{ fontSize: '14px', color: '#6b7280' }}>
+                            Count: {word.frequency_count}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
