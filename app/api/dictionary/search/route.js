@@ -9,71 +9,41 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url)
     const query = searchParams.get('q') || ''
-    const searchType = searchParams.get('type') || 'both'
-    const source = searchParams.get('source')
-    const limit = parseInt(searchParams.get('limit')) || 100
+    const letter = searchParams.get('letter')
     
-    let supabaseQuery = supabase
+    let dbQuery = supabase
       .from('dictionary_entries')
       .select(`
         *,
         dictionary_meanings (
           id,
           meaning_number,
-          german_meaning,
-          halunder_meaning,
+          definition,
           context,
           usage_notes
-        ),
-        dictionary_examples (
-          id,
-          halunder_sentence,
-          german_sentence,
-          source_reference
-        ),
-        dictionary_verb_details (
-          verb_class,
-          conjugation_class
         )
       `)
+      .order('halunder_word', { ascending: true })
     
-    // Handle letter search vs text search
-    if (query.length === 1 && /^[A-ZÄÖÜ]$/i.test(query)) {
-      // Single letter - filter by first letter
-      supabaseQuery = supabaseQuery.ilike('halunder_word', `${query}%`)
+    if (letter) {
+      // Search by first letter of Halunder word
+      dbQuery = dbQuery.ilike('halunder_word', `${letter}%`)
     } else if (query) {
-      // Text search
-      if (searchType === 'halunder') {
-        supabaseQuery = supabaseQuery.ilike('halunder_word', `%${query}%`)
-      } else if (searchType === 'german') {
-        // Search in german_word or in meanings
-        supabaseQuery = supabaseQuery.or(
-          `german_word.ilike.%${query}%,dictionary_meanings.german_meaning.ilike.%${query}%`
-        )
-      } else {
-        // Search both
-        supabaseQuery = supabaseQuery.or(
-          `halunder_word.ilike.%${query}%,german_word.ilike.%${query}%,dictionary_meanings.german_meaning.ilike.%${query}%`
-        )
-      }
+      // Search in Halunder words (primary) or German translations
+      dbQuery = dbQuery.or(`halunder_word.ilike.%${query}%,german_word.ilike.%${query}%`)
     }
     
-    if (source && source !== 'all') {
-      supabaseQuery = supabaseQuery.eq('source', source)
+    const { data, error } = await dbQuery.limit(100)
+    
+    if (error) {
+      console.error('Search error:', error)
+      return Response.json({ error: error.message }, { status: 500 })
     }
-    
-    supabaseQuery = supabaseQuery
-      .order('halunder_word')
-      .limit(limit)
-    
-    const { data, error } = await supabaseQuery
-    
-    if (error) throw error
     
     return Response.json({ entries: data || [] })
     
   } catch (error) {
-    console.error('Dictionary search error:', error)
+    console.error('API error:', error)
     return Response.json({ error: error.message }, { status: 500 })
   }
 }
